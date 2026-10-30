@@ -1,0 +1,12 @@
+amiga_original/
+kickstart/
+ghidra/
+build/
+tools/fs-uae/
+tools/fs-uae-*/
+*.o
+dpaint
+smoke
+notes/decomp/
+animations/
+wolles/

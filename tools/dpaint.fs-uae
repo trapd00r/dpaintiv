@@ -1,0 +1,11 @@
+amiga_model = A500
+kickstart_file = /home/scp1/dev/dpaintiv/kickstart/kick34005.A500
+floppy_drive_0 = /home/scp1/dev/dpaintiv/amiga_original/deluxe-paint4.adf
+chip_memory = 512
+slow_memory = 512
+fullscreen = 0
+window_width = 768
+window_height = 540
+automatic_input_grab = 0
+warp_mode = 1
+joystick_port_1_mode = none
