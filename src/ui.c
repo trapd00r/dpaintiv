@@ -1127,7 +1127,7 @@ static void tool_color(const DpAssets *a, const Doc *d,
                        int *cr, int *cg, int *cb, int *invert)
 {
     static const int tool_icon[8][2] = {
-        {0, 27}, {2, 3}, {4, 5}, {6, 7},
+        {0, 1}, {2, 3}, {4, 5}, {6, 18},
         {8, 9}, {10, 11}, {12, 13}, {14, 15}
     };
     int x0, x1, y0, y1, cw, ch, sca, ox, oy, lx, ly, ink, edge;
