@@ -102,16 +102,11 @@ static int load_hunk(const char *path, uint8_t **out, int *outlen)
     return 0;
 }
 
-int dp_font_load(DpFont *f, const char *path)
+static int parse_font(DpFont *f, uint8_t *mem, int len)
 {
-    uint8_t *mem = NULL;
-    int len = 0;
     int i;
 
     memset(f, 0, sizeof(*f));
-    if (load_hunk(path, &mem, &len) != 0) {
-        return -1;
-    }
     for (i = 0; i + 32 < len; i += 2) {
         int ys = rd16(mem + i);
         int flags = mem[i + 3];
@@ -181,6 +176,40 @@ int dp_font_load(DpFont *f, const char *path)
     }
     free(mem);
     return -1;
+}
+
+int dp_font_load(DpFont *f, const char *path)
+{
+    uint8_t *mem = NULL;
+    int len = 0;
+
+    memset(f, 0, sizeof(*f));
+    if (load_hunk(path, &mem, &len) != 0) {
+        return -1;
+    }
+    return parse_font(f, mem, len);
+}
+
+int dp_font_adopt(DpFont *f, const uint8_t *bytes, int len, const char *face)
+{
+    uint8_t *mem;
+
+    memset(f, 0, sizeof(*f));
+    if (bytes == NULL || len < 32) {
+        return -1;
+    }
+    mem = (uint8_t *)malloc((size_t)len);
+    if (mem == NULL) {
+        return -1;
+    }
+    memcpy(mem, bytes, (size_t)len);
+    if (parse_font(f, mem, len) != 0) {
+        return -1;
+    }
+    if (face != NULL) {
+        snprintf(f->face, sizeof(f->face), "%s", face);
+    }
+    return 0;
 }
 
 void dp_font_free(DpFont *f)

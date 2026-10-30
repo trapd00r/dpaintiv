@@ -258,7 +258,9 @@ const char *dp_mode_name(int mode);
 const char *const *dp_about_lines(int *n);
 
 int dp_font_load(DpFont *f, const char *path);
+int dp_font_adopt(DpFont *f, const uint8_t *bytes, int len, const char *face);
 void dp_font_free(DpFont *f);
+void dp_builtin_fill(DpAssets *a);
 int dp_font_width(const DpFont *f, const char *s);
 int dp_font_char_space(const DpFont *f, int ch);
 int dp_font_glyphs(const DpFont *f, const char *s, int x,

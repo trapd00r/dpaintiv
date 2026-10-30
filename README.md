@@ -1,14 +1,17 @@
 # Deluxe Paint IV for Linux
 
-A native C and SDL2 recreation of Deluxe Paint IV. The menu names, toolbox
-icons, default palette, and UI font come from the user's Amiga disk. The
-page is whatever space is left after the menu bar, tool column, and
-palette, so a large monitor gets a larger page than 320x200. Screen
-Format still offers the four original sizes.
+A native C and SDL2 recreation of Deluxe Paint IV. The menu names match
+the original. The UI font, the other built-in faces, the toolbox
+bitplanes, and the default palette are compiled into the source, so the
+program paints text with no Amiga disk present. The page is whatever
+space is left after the menu bar, tool column, and palette, so a large
+monitor gets a larger page than 320x200. Screen Format still offers the
+four original sizes.
 
 Original Deluxe Paint IV is copyright 1985-1991 Electronic Arts. This
-tree does not ship the ADF, the program, or the font bitmaps. Unpack
-the disk under `amiga_original/unpacked/` (gitignored).
+tree does not ship the ADF, the program, kickstarts, or the unpacked
+disk. Those stay in `amiga_original/` and `kickstart/` (gitignored) for
+FS-UAE only.
 
 ## Build and run
 
@@ -16,7 +19,7 @@ Needs gcc and SDL2 (`pkg-config sdl2`).
 
 ```
 make
-./dpaint amiga_original/unpacked
+./dpaint
 make smoke
 ```
 
@@ -27,8 +30,10 @@ GRAB; writes a compressed ANIM and an expanded ANIM; writes a PRSP and
 a 1-plane stencil; reads each back and compares pixels or bytes; and
 writes `ui.ppm` of the chrome. The temp directory is printed at the end.
 
-The window title is Deluxe Paint IV. Pass another unpacked-disk path as
-the first argument if the fonts are not in `amiga_original/unpacked`.
+The window title is Deluxe Paint IV. A directory argument still loads
+DiskFont files and a DPaint hunk from that path. With no argument the
+built-in faces, icons, and palette are used. Picking a font file still
+goes through the DiskFont loader.
 
 ## What this build does
 

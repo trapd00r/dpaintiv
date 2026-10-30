@@ -196,11 +196,6 @@ int main(void)
     int mw = 0, mh = 0;
     uint8_t dpps[DP_DPPS_LEN];
     uint8_t *snap;
-    const char *root = getenv("DPAINT_DATA");
-
-    if (root == NULL || root[0] == '\0') {
-        root = "amiga_original/unpacked";
-    }
     if (mkdtemp(dir) == NULL) {
         fprintf(stderr, "mkdtemp failed\n");
         return 1;
@@ -214,9 +209,25 @@ int main(void)
     snprintf(p7, sizeof(p7), "%s/circle.ilbm", dir);
     snprintf(ppm, sizeof(ppm), "%s/ui.ppm", dir);
 
-    expect(dp_assets_load(&assets, root) == 0, "font load");
+    expect(dp_assets_load(&assets, NULL) == 0, "font load");
     expect(assets.nfonts >= 1, "DPaint font");
     expect(assets.fonts[0].ysize == 8, "font size 8");
+    {
+        uint8_t cell[16 * 16];
+        int ink = 0;
+        int ci;
+        DpFont picked;
+        memset(cell, 0, sizeof(cell));
+        dp_font_index(&assets.fonts[0], cell, 16, 16, 0, 0, "A", 1);
+        for (ci = 0; ci < 16 * 16; ci++) {
+            if (cell[ci] == 1) {
+                ink++;
+            }
+        }
+        expect(ink > 4, "baked font draws A");
+        expect(dp_font_load(&picked, "/no/such/dpaint-font") != 0,
+               "a missing font file is not treated as built in");
+    }
     expect(assets.nicons >= 29, "tool bitplanes");
     expect(assets.icon[2][0][0] == 1 && assets.icon[2][5][5] == 0, "line icon is the bitplane");
     expect(assets.icon[11][2][4] == 0 && assets.icon[16][1][1] == 0, "text and undo bitplanes");

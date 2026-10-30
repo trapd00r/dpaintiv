@@ -242,11 +242,11 @@ int dp_assets_load(DpAssets *a, const char *root)
     int i;
 
     memset(a, 0, sizeof(*a));
-    if (root == NULL || root[0] == '\0') {
-        root = "amiga_original/unpacked";
+    if (root != NULL && root[0] != '\0') {
+        snprintf(a->root, sizeof(a->root), "%s", root);
     }
-    snprintf(a->root, sizeof(a->root), "%s", root);
-    for (i = 0; faces[i] != NULL && a->nfonts < DP_MAX_FONTS; i++) {
+    for (i = 0; root != NULL && root[0] != '\0' &&
+         faces[i] != NULL && a->nfonts < DP_MAX_FONTS; i++) {
         if (join(path, (int)sizeof(path), root, faces[i]) != 0) {
             continue;
         }
@@ -256,10 +256,8 @@ int dp_assets_load(DpAssets *a, const char *root)
             a->nfonts++;
         }
     }
-    if (a->nfonts < 1) {
-        return -1;
-    }
-    if (join(path, (int)sizeof(path), root, "DPaint") == 0 &&
+    if (root != NULL && root[0] != '\0' &&
+        join(path, (int)sizeof(path), root, "DPaint") == 0 &&
         read_file(path, &file, &flen) == 0) {
         if (split_hunks(file, flen, &h1, &h1len, &h2, &h2len) == 0) {
             load_icons(a, h1, h1len, h2, h2len);
@@ -272,6 +270,7 @@ int dp_assets_load(DpAssets *a, const char *root)
     free(file);
     free(h1);
     free(h2);
+    dp_builtin_fill(a);
     if (!a->pal_ok) {
         for (i = 0; i < DP_MAX_COLORS; i++) {
             uint8_t v = (uint8_t)(i * 255 / 31);
@@ -280,7 +279,7 @@ int dp_assets_load(DpAssets *a, const char *root)
             a->pal[i].b = v;
         }
     }
-    return 0;
+    return a->nfonts < 1 ? -1 : 0;
 }
 
 void dp_assets_free(DpAssets *a)

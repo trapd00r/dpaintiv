@@ -126,7 +126,7 @@ static int map_key(SDL_Keycode sym, int *ch)
 
 int main(int argc, char **argv)
 {
-    const char *root = argc > 1 ? argv[1] : "amiga_original/unpacked";
+    const char *root = argc > 1 ? argv[1] : NULL;
     DpAssets assets;
     Doc doc;
     Ui ui;
@@ -140,7 +140,7 @@ int main(int argc, char **argv)
     int mh, tw, bh, vw, vh;
 
     if (dp_assets_load(&assets, root) != 0) {
-        fprintf(stderr, "Could not load DPaint font from %s\n", root);
+        fprintf(stderr, "Could not load a DPaint font\n");
         return 1;
     }
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
