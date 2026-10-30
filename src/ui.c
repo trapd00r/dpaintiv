@@ -19,9 +19,10 @@
 #define GADGET (ICON_PX + 2)
 #define TOOL_STRIP (GADGET * 2)
 #define BRUSH_CELL_W 6
-#define BRUSH_CELL_H 10
-#define BRUSH_W (BRUSH_CELL_W * 4 + 2)
-#define BRUSH_H (BRUSH_CELL_H * 2 + 2)
+#define BRUSH_CELL_H 8
+#define BRUSH_COLS 4
+#define BRUSH_W (BRUSH_CELL_W * BRUSH_COLS + 2)
+#define BRUSH_H (BRUSH_CELL_H * 3 + 2)
 #define PANEL_H 24
 #define PANEL_BTNS 15
 #define NTOOL_ROWS 8
@@ -1019,63 +1020,99 @@ static int letter_on(int which, int x, int y)
     return row[x] == '#';
 }
 
+static int brush_ink(int n, int cx, int cy)
+{
+    switch (n) {
+    case 1:
+        return cx == 3 && cy == 4;
+    case 2:
+        return (cy == 3 && cx >= 2 && cx <= 3) ||
+               (cy == 4 && cx >= 1 && cx <= 4) ||
+               (cy == 5 && cx >= 2 && cx <= 3);
+    case 3:
+        return (cy == 2 && cx >= 2 && cx <= 3) ||
+               (cy >= 3 && cy <= 5 && cx >= 1 && cx <= 4) ||
+               (cy == 6 && cx >= 2 && cx <= 3);
+    case 4:
+        return (cy == 1 && cx >= 2 && cx <= 3) ||
+               (cy >= 2 && cy <= 5 && cx >= 1 && cx <= 4) ||
+               (cy == 6 && cx >= 2 && cx <= 3);
+    case 5:
+        return cx >= 2 && cx <= 3 && cy >= 3 && cy <= 4;
+    case 6:
+        return cx >= 1 && cx <= 3 && cy >= 2 && cy <= 4;
+    case 7:
+        return cx >= 1 && cx <= 4 && cy >= 2 && cy <= 5;
+    case 8:
+        return cx >= 1 && cx <= 4 && cy >= 1 && cy <= 5;
+    case 9:
+        return (cx == 6 && cy == 3) || (cx == 5 && cy == 5) || (cx == 7 && cy == 5);
+    case 10:
+        return (cx == 4 && cy == 2) || (cx == 8 && cy == 2) ||
+               (cx == 6 && cy == 4) ||
+               (cx == 4 && cy == 6) || (cx == 8 && cy == 6);
+    default:
+        return 0;
+    }
+}
+
 static void brush_pixel(const Doc *d, int dx, int dy,
                         int *cr, int *cg, int *cb, int *invert)
 {
-    int col, row, n, x0, y0, cx, cy, ink, edge;
+    int col, row, n, x0, y0, cx, cy, cw, ink;
     *cr = CHROME_R;
     *cg = CHROME_G;
     *cb = CHROME_B;
     *invert = 0;
-    edge = 0;
     if (dx == 0 || dy == 0) {
-        edge = 1;
-    }
-    if (dx == BRUSH_W - 1 || dy == BRUSH_H - 1) {
-        edge = 2;
-    }
-    if (edge == 1) {
         *cr = 230;
         *cg = 230;
         *cb = 230;
         return;
     }
-    if (edge == 2) {
+    if (dx == BRUSH_W - 1 || dy == BRUSH_H - 1) {
         *cr = 100;
         *cg = 100;
         *cb = 100;
         return;
     }
-    col = (dx - 1) / BRUSH_CELL_W;
     row = (dy - 1) / BRUSH_CELL_H;
-    if (col > 3) {
-        col = 3;
+    if (row > 2) {
+        row = 2;
     }
-    if (row > 1) {
-        row = 1;
+    if (row < 2) {
+        col = (dx - 1) / BRUSH_CELL_W;
+        if (col > 3) {
+            col = 3;
+        }
+        n = row * 4 + col + 1;
+        cw = BRUSH_CELL_W;
+        x0 = 1 + col * BRUSH_CELL_W;
+    } else {
+        col = (dx - 1) >= (BRUSH_W - 2) / 2 ? 1 : 0;
+        n = 9 + col;
+        cw = (BRUSH_W - 2) / 2;
+        x0 = 1 + col * cw;
     }
-    n = row * 4 + col + 1;
-    if (n == d->brush_d) {
-        *invert = 1;
-    }
-    x0 = 1 + col * BRUSH_CELL_W;
     y0 = 1 + row * BRUSH_CELL_H;
     cx = dx - x0;
     cy = dy - y0;
-    ink = 0;
-    if (n >= 1 && n <= 8 && cx >= 0 && cy >= 0 && cx < 6 && cy < 10) {
-        static const char *const glyph[8][10] = {
-            {"......", "......", "......", "......", "..#...", "......", "......", "......", "......", "......"},
-            {"......", "......", "......", "..#...", ".###..", "..#...", "......", "......", "......", "......"},
-            {"......", "......", "..#...", ".###..", "#####.", ".###..", "..#...", "......", "......", "......"},
-            {"......", "..#...", ".###..", "#####.", "#####.", "#####.", ".###..", "..#...", "......", "......"},
-            {"..#...", ".###..", "#####.", "#####.", "#####.", "#####.", "#####.", ".###..", "..#...", "......"},
-            {".##...", "####..", "######", "######", "######", "######", "######", "####..", ".##...", "......"},
-            {".###..", "######", "######", "######", "######", "######", "######", "######", ".###..", "......"},
-            {"####..", "######", "######", "######", "######", "######", "######", "######", "######", "####.."}
-        };
-        ink = glyph[n - 1][cy][cx] == '#';
+    if (n == d->brush_d) {
+        *invert = 1;
     }
+    if (cx == cw - 1 || cy == BRUSH_CELL_H - 1) {
+        *cr = 100;
+        *cg = 100;
+        *cb = 100;
+        return;
+    }
+    if (cx == 0 || cy == 0) {
+        *cr = 230;
+        *cg = 230;
+        *cb = 230;
+        return;
+    }
+    ink = brush_ink(n, cx, cy);
     if (ink) {
         *cr = 0;
         *cg = 0;
@@ -3212,13 +3249,16 @@ static int brush_size_at(const Ui *u, int lx, int ly)
     if (ry > BRUSH_H - 2) {
         ry = BRUSH_H - 2;
     }
-    col = (rx - 1) / BRUSH_CELL_W;
     row = (ry - 1) / BRUSH_CELL_H;
+    if (row > 2) {
+        row = 2;
+    }
+    if (row >= 2) {
+        return (rx - 1) < (BRUSH_W - 2) / 2 ? 9 : 10;
+    }
+    col = (rx - 1) / BRUSH_CELL_W;
     if (col > 3) {
         col = 3;
-    }
-    if (row > 1) {
-        row = 1;
     }
     return row * 4 + col + 1;
 }
@@ -3573,7 +3613,7 @@ static int hover_info(const Ui *u, const Doc *d, int id,
     if (id <= 0 || text == NULL || n < 8) {
         return 0;
     }
-    if (id > HV_BRUSH && id < HV_BRUSH + 9) {
+    if (id > HV_BRUSH && id < HV_BRUSH + 11) {
         int size = id - HV_BRUSH;
         int ix, iy, iw, ih, bh, bx, col, row;
         snprintf(text, (size_t)n, "Size %d", size);
@@ -3582,6 +3622,11 @@ static int hover_info(const Ui *u, const Doc *d, int id,
         bx = ix + iw - BRUSH_W;
         if (bx < 0) {
             bx = 0;
+        }
+        if (size >= 9) {
+            *ax = bx + 1 + (size - 9) * ((BRUSH_W - 2) / 2);
+            *ay = iy + 1 + 2 * BRUSH_CELL_H;
+            return 1;
         }
         col = (size - 1) % 4;
         row = (size - 1) / 4;

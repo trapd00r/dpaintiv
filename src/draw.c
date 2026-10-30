@@ -777,6 +777,26 @@ int doc_brush_covers(int size, int dx, int dy)
     if (n < 1) {
         n = 1;
     }
+    if (n >= 5 && n <= 8) {
+        static const int ex[4] = {2, 3, 3, 4};
+        static const int ey[4] = {2, 2, 3, 3};
+        int i = n - 5;
+        if (dx < 0) {
+            dx = -dx;
+        }
+        if (dy < 0) {
+            dy = -dy;
+        }
+        return dx <= ex[i] && dy <= ey[i];
+    }
+    if (n == 9) {
+        return (dx == 0 && dy == -1) || (dx == -1 && dy == 1) || (dx == 1 && dy == 1);
+    }
+    if (n == 10) {
+        return (dx == -1 && dy == -1) || (dx == 1 && dy == -1) ||
+               (dx == 0 && dy == 0) ||
+               (dx == -1 && dy == 1) || (dx == 1 && dy == 1);
+    }
     if (n > 8) {
         n = 8;
     }

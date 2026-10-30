@@ -720,7 +720,7 @@ int main(void)
         expect(rgb[mark] != plain, "active tool cell is marked");
         {
             int ink_n = 0, fill_n = 0, sx, sy;
-            for (sy = 46; sy < 57; sy++) {
+            for (sy = 50; sy < 61; sy++) {
                 for (sx = 775; sx < 786; sx++) {
                     int pi = (sy * 800 + sx) * 3;
                     if (rgb[pi] == 255 && rgb[pi + 1] == 255 && rgb[pi + 2] == 255) {
