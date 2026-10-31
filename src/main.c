@@ -228,6 +228,12 @@ int main(int argc, char **argv)
                 ui_motion(&ui, &doc, &assets, ev.motion.x, ev.motion.y,
                           ev.motion.state);
                 apply_pointer(win, ui.cursor_cross);
+            } else if (ev.type == SDL_MOUSEWHEEL) {
+                int dy = ev.wheel.y;
+                if (ev.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+                    dy = -dy;
+                }
+                ui_wheel(&ui, &doc, ev.wheel.mouseX, ev.wheel.mouseY, dy);
             } else if (ev.type == SDL_TEXTINPUT) {
                 const char *s = ev.text.text;
                 int typing = ui.prompt || (ui.text_on && doc.tool == TOOL_TEXT);

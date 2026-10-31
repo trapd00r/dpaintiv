@@ -1389,7 +1389,23 @@ int main(void)
             free(rgb);
         }
     }
-    expect(ui.enh_hover && ui.enh_undo && ui.enh_title, "2026 toggles default on");
+    expect(ui.enh_hover && ui.enh_undo && ui.enh_title && ui.enh_wheel,
+           "2026 toggles default on");
+    doc.fg = 0;
+    ui.arrange = 0;
+    ui.prompt = 0;
+    ui.text_on = 0;
+    ui_wheel(&ui, &doc, 10, 10, 1);
+    expect(doc.fg == 1, "wheel up from 0 selects 1");
+    doc.fg = 0;
+    ui_wheel(&ui, &doc, 10, 10, -1);
+    expect(doc.fg == 63, "wheel down from 0 wraps to the last color");
+    ui.enh_wheel = 0;
+    doc.fg = 0;
+    ui_wheel(&ui, &doc, 10, 10, 1);
+    expect(doc.fg == 0, "wheel off leaves the color");
+    ui.enh_wheel = 1;
+    ui.wheel_ms = 0;
     doc_set_undo_hist(&doc, 0);
     doc_set_undo_hist(&doc, 1);
     doc_clear(&doc);

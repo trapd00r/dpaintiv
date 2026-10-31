@@ -519,6 +519,7 @@ void ui_init(Ui *u)
     u->enh_hover = 1;
     u->enh_undo = 1;
     u->enh_title = 1;
+    u->enh_wheel = 1;
 }
 
 static const DpFont *font(const DpAssets *a, const Ui *u)
@@ -1429,6 +1430,7 @@ static void draw_hover(const Ui *u, const Doc *d, const DpAssets *a,
 static void draw_enh(const Ui *u, const DpAssets *a, uint8_t *rgb, int w, int h);
 static void draw_arrange(const Ui *u, const Doc *d, const DpAssets *a,
                          uint8_t *rgb, int w, int h);
+static void draw_wheel_swatch(const Ui *u, const Doc *d, uint8_t *rgb, int w, int h);
 
 void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
                uint8_t *rgb, int w, int h)
@@ -1656,7 +1658,12 @@ void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
         int tx, twide, ix, iy, iw, ih, bhh, px0, py0, cw;
         int dx, dy, mark_row, mark_col, mag_row, mag_col, brow;
         int row_y0[NSTRIP_ROWS], row_y1[NSTRIP_ROWS];
-        DpColor fgc = d->pal[d->fg >= 0 && d->fg < d->ncolors ? d->fg : 0];
+        int fi = d->fg;
+        DpColor fgc;
+        if (fi < 0 || fi >= DP_MAX_COLORS) {
+            fi = 0;
+        }
+        fgc = d->pal[fi];
         strip_metrics(u, d->ncolors, &tx, &twide, &ix, &iy, &iw, &ih, &bhh,
                       &px0, &py0, NULL, NULL, &cw);
         mark_row = -1;
@@ -1745,6 +1752,22 @@ void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
             }
             fill_rect(rgb, w, h, cx * s, cy * s, cw * s, cw * s,
                       d->pal[i].r, d->pal[i].g, d->pal[i].b);
+            if (i == d->fg && cw > 2) {
+                int br = 255, bgc = 255, bb = 255;
+                if (d->pal[i].r + d->pal[i].g + d->pal[i].b > 600) {
+                    br = 0;
+                    bgc = 0;
+                    bb = 0;
+                }
+                fill_rect(rgb, w, h, cx * s, cy * s, cw * s, s,
+                          (uint8_t)br, (uint8_t)bgc, (uint8_t)bb);
+                fill_rect(rgb, w, h, cx * s, (cy + cw - 1) * s, cw * s, s,
+                          (uint8_t)br, (uint8_t)bgc, (uint8_t)bb);
+                fill_rect(rgb, w, h, cx * s, cy * s, s, cw * s,
+                          (uint8_t)br, (uint8_t)bgc, (uint8_t)bb);
+                fill_rect(rgb, w, h, (cx + cw - 1) * s, cy * s, s, cw * s,
+                          (uint8_t)br, (uint8_t)bgc, (uint8_t)bb);
+            }
         }
     }
 
@@ -1882,6 +1905,7 @@ void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
     draw_hover(u, d, a, rgb, w, h);
     draw_enh(u, a, rgb, w, h);
     draw_arrange(u, d, a, rgb, w, h);
+    draw_wheel_swatch(u, d, rgb, w, h);
 }
 
 static int need_brush(Doc *d)
@@ -2869,6 +2893,7 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
         u->enh_edit_hover = u->enh_hover;
         u->enh_edit_undo = u->enh_undo;
         u->enh_edit_title = u->enh_title;
+        u->enh_edit_wheel = u->enh_wheel;
         u->enh_open = 1;
         break;
     case A_ARRANGE:
@@ -3786,10 +3811,11 @@ static void draw_hover(const Ui *u, const Doc *d, const DpAssets *a,
     dp_font_rgb(f, rgb, w, h, (bx + 2) * s, (by + 1) * s, text, 0, 0, 0, s);
 }
 
-static const char *const enh_name[3] = {
+static const char *const enh_name[4] = {
     "Hover help",
     "Undo history",
-    "Title frame readout"
+    "Title frame readout",
+    "Mouse wheel colors"
 };
 
 static void enh_geom(const Ui *u, int *bx, int *by, int *bw, int *bh,
@@ -3798,7 +3824,7 @@ static void enh_geom(const Ui *u, int *bx, int *by, int *bw, int *bh,
     int lw = log_w(u);
     int lh = log_h(u);
     *bw = 196;
-    *bh = 86;
+    *bh = 102;
     *bx = (lw - *bw) / 2;
     if (*bx < 4) {
         *bx = 4;
@@ -3823,16 +3849,21 @@ static int enh_flag(const Ui *u, int i)
     if (i == 1) {
         return u->enh_edit_undo;
     }
-    return u->enh_edit_title;
+    if (i == 2) {
+        return u->enh_edit_title;
+    }
+    return u->enh_edit_wheel;
 }
 
 static void enh_toggle(Ui *u, int i)
 {
-    int *p = &u->enh_edit_title;
+    int *p = &u->enh_edit_wheel;
     if (i == 0) {
         p = &u->enh_edit_hover;
     } else if (i == 1) {
         p = &u->enh_edit_undo;
+    } else if (i == 2) {
+        p = &u->enh_edit_title;
     }
     *p = !*p;
 }
@@ -3843,6 +3874,10 @@ static void enh_apply(Ui *u, Doc *d)
     u->enh_hover = u->enh_edit_hover ? 1 : 0;
     u->enh_undo = u->enh_edit_undo ? 1 : 0;
     u->enh_title = u->enh_edit_title ? 1 : 0;
+    u->enh_wheel = u->enh_edit_wheel ? 1 : 0;
+    if (!u->enh_wheel) {
+        u->wheel_ms = 0;
+    }
     if (u->enh_undo != was) {
         doc_set_undo_hist(d, u->enh_undo);
     }
@@ -3868,7 +3903,7 @@ static void draw_enh(const Ui *u, const DpAssets *a, uint8_t *rgb, int w, int h)
     fill_rect(rgb, w, h, bx * s, by * s, bw * s, 12 * s, 20, 70, 180);
     dp_font_rgb(f, rgb, w, h, (bx + 6) * s, (by + 2) * s, "2026 version",
                 255, 255, 255, s);
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < 4; i++) {
         int y = by + 18 + i * 16;
         int on = enh_flag(u, i);
         fill_rect(rgb, w, h, (bx + 8) * s, y * s, 9 * s, 9 * s, 255, 255, 255);
@@ -3901,7 +3936,7 @@ static int enh_click(Ui *u, Doc *d, int lx, int ly)
         u->enh_open = 0;
         return 1;
     }
-    for (i = 0; i < 3; i++) {
+    for (i = 0; i < 4; i++) {
         int y = by + 18 + i * 16;
         if (lx >= bx + 8 && lx < bx + bw - 8 && ly >= y && ly < y + 12) {
             enh_toggle(u, i);
@@ -5037,11 +5072,88 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
     }
 }
 
+void ui_wheel(Ui *u, Doc *d, int mx, int my, int dy)
+{
+    int n = DP_MAX_COLORS;
+    int c;
+    if (dy == 0 || !u->enh_wheel || u->arrange) {
+        return;
+    }
+    if (u->prompt || (u->text_on && d->tool == TOOL_TEXT)) {
+        return;
+    }
+    c = d->fg;
+    if (dy > 0) {
+        c++;
+    } else {
+        c--;
+    }
+    if (c < 0) {
+        c = n - 1;
+    }
+    if (c >= n) {
+        c = 0;
+    }
+    d->fg = c;
+    u->wheel_x = mx;
+    u->wheel_y = my;
+    u->wheel_ms = 500;
+    u->pointer_x = mx;
+    u->pointer_y = my;
+    u->pointer_seen = 1;
+}
+
+static void draw_wheel_swatch(const Ui *u, const Doc *d, uint8_t *rgb, int w, int h)
+{
+    int x, y, side, fi, fr, fg, fb;
+    DpColor c;
+    if (!u->enh_wheel || u->wheel_ms <= 0) {
+        return;
+    }
+    fi = d->fg;
+    if (fi < 0 || fi >= DP_MAX_COLORS) {
+        return;
+    }
+    c = d->pal[fi];
+    side = 16;
+    x = u->wheel_x + 18;
+    y = u->wheel_y + 14;
+    if (x + side > w) {
+        x = u->wheel_x - 18 - side;
+    }
+    if (y + side > h) {
+        y = u->wheel_y - 14 - side;
+    }
+    if (x < 0) {
+        x = 0;
+    }
+    if (y < 0) {
+        y = 0;
+    }
+    if (c.r + c.g + c.b > 500) {
+        fr = 0;
+        fg = 0;
+        fb = 0;
+    } else {
+        fr = 255;
+        fg = 255;
+        fb = 255;
+    }
+    fill_rect(rgb, w, h, x, y, side, side, (uint8_t)fr, (uint8_t)fg, (uint8_t)fb);
+    fill_rect(rgb, w, h, x + 1, y + 1, side - 2, side - 2, c.r, c.g, c.b);
+}
+
 void ui_tick(Ui *u, Doc *d, uint32_t dt_ms)
 {
     int a, b, n;
     if (u->hover_id != 0 && u->hover_ms < 4000) {
         u->hover_ms += (int)dt_ms;
+    }
+    if (u->wheel_ms > 0) {
+        u->wheel_ms -= (int)dt_ms;
+        if (u->wheel_ms < 0) {
+            u->wheel_ms = 0;
+        }
     }
     if (d->nranges > 0 && d->ranges[0].active) {
         {

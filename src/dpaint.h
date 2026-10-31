@@ -200,10 +200,15 @@ typedef struct {
     int enh_hover;
     int enh_undo;
     int enh_title;
+    int enh_wheel;
     int enh_open;
     int enh_edit_hover;
     int enh_edit_undo;
     int enh_edit_title;
+    int enh_edit_wheel;
+    int wheel_ms;
+    int wheel_x;
+    int wheel_y;
     int arrange;
     int arr_top;
     int arr_sel;
@@ -348,6 +353,7 @@ int iff_load_stencil(const char *path, uint8_t **mask, int *w, int *h,
 
 void ui_init(Ui *u);
 void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down);
+void ui_wheel(Ui *u, Doc *d, int mx, int my, int dy);
 void ui_motion(Ui *u, Doc *d, DpAssets *a, int mx, int my, int buttons);
 void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch);
 void ui_tick(Ui *u, Doc *d, uint32_t dt_ms);
