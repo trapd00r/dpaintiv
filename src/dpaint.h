@@ -356,6 +356,9 @@ int iff_load_stencil(const char *path, uint8_t **mask, int *w, int *h,
                      char *err, int errlen);
 
 void ui_init(Ui *u);
+void ui_cfg_path(char *dst, int n);
+void ui_cfg_load(Ui *u, const char *path);
+void ui_cfg_save(const Ui *u, const char *path);
 void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down);
 void ui_wheel(Ui *u, Doc *d, int mx, int my, int dy, int shift);
 void ui_motion(Ui *u, Doc *d, DpAssets *a, int mx, int my, int buttons);

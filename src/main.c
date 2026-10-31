@@ -164,6 +164,11 @@ int main(int argc, char **argv)
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     SDL_GetWindowSize(win, &win_w, &win_h);
     ui_init(&ui);
+    {
+        char cfg[512];
+        ui_cfg_path(cfg, (int)sizeof(cfg));
+        ui_cfg_load(&ui, cfg);
+    }
     ui.win_w = win_w;
     ui.win_h = win_h;
     ui.scale = win_h >= 1100 ? 3 : (win_h >= 700 ? 2 : 1);
@@ -177,6 +182,7 @@ int main(int argc, char **argv)
     if (!assets.pal_ok) {
         doc_status(&doc, "Default palette fallback");
     }
+    doc_set_undo_hist(&doc, ui.enh_undo);
     tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING,
                             win_w, win_h);
     rgb = (uint8_t *)malloc((size_t)win_w * (size_t)win_h * 3u);

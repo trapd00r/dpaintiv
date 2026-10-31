@@ -523,6 +523,82 @@ void ui_init(Ui *u)
     u->enh_pick = 1;
 }
 
+void ui_cfg_path(char *dst, int n)
+{
+    char exe[512];
+    ssize_t got;
+    char *slash;
+    if (dst == NULL || n < 2) {
+        return;
+    }
+    dst[0] = 0;
+    got = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+    if (got > 0) {
+        exe[got] = 0;
+        slash = strrchr(exe, '/');
+        if (slash != NULL) {
+            *slash = 0;
+            snprintf(dst, (size_t)n, "%s/dpaint2026.cfg", exe);
+            return;
+        }
+    }
+    snprintf(dst, (size_t)n, "dpaint2026.cfg");
+}
+
+void ui_cfg_load(Ui *u, const char *path)
+{
+    FILE *fp;
+    char line[80];
+    char key[32];
+    int v;
+    if (u == NULL || path == NULL || path[0] == 0) {
+        return;
+    }
+    fp = fopen(path, "r");
+    if (fp == NULL) {
+        return;
+    }
+    while (fgets(line, (int)sizeof(line), fp) != NULL) {
+        if (sscanf(line, "%31s %d", key, &v) != 2) {
+            continue;
+        }
+        v = v ? 1 : 0;
+        if (strcmp(key, "hover") == 0) {
+            u->enh_hover = v;
+        } else if (strcmp(key, "undo") == 0) {
+            u->enh_undo = v;
+        } else if (strcmp(key, "title") == 0) {
+            u->enh_title = v;
+        } else if (strcmp(key, "wheel") == 0) {
+            u->enh_wheel = v;
+        } else if (strcmp(key, "pick") == 0) {
+            u->enh_pick = v;
+        }
+    }
+    fclose(fp);
+    if (!u->enh_wheel) {
+        u->wheel_ms = 0;
+    }
+}
+
+void ui_cfg_save(const Ui *u, const char *path)
+{
+    FILE *fp;
+    if (u == NULL || path == NULL || path[0] == 0) {
+        return;
+    }
+    fp = fopen(path, "w");
+    if (fp == NULL) {
+        return;
+    }
+    fprintf(fp, "hover %d\n", u->enh_hover ? 1 : 0);
+    fprintf(fp, "undo %d\n", u->enh_undo ? 1 : 0);
+    fprintf(fp, "title %d\n", u->enh_title ? 1 : 0);
+    fprintf(fp, "wheel %d\n", u->enh_wheel ? 1 : 0);
+    fprintf(fp, "pick %d\n", u->enh_pick ? 1 : 0);
+    fclose(fp);
+}
+
 static const DpFont *font(const DpAssets *a, const Ui *u)
 {
     (void)u;
@@ -3916,6 +3992,11 @@ static void enh_apply(Ui *u, Doc *d)
     }
     if (u->enh_undo != was) {
         doc_set_undo_hist(d, u->enh_undo);
+    }
+    {
+        char path[512];
+        ui_cfg_path(path, (int)sizeof(path));
+        ui_cfg_save(u, path);
     }
     u->enh_open = 0;
 }

@@ -1437,6 +1437,32 @@ int main(void)
         ui.enh_pick = 1;
         ui.wheel_ms = 0;
     }
+    {
+        char path[] = "/tmp/dpaint2026-smoke.cfg";
+        ui.enh_hover = 0;
+        ui.enh_undo = 0;
+        ui.enh_title = 1;
+        ui.enh_wheel = 0;
+        ui.enh_pick = 1;
+        ui_cfg_save(&ui, path);
+        ui.enh_hover = 1;
+        ui.enh_undo = 1;
+        ui.enh_title = 0;
+        ui.enh_wheel = 1;
+        ui.enh_pick = 0;
+        ui_cfg_load(&ui, path);
+        expect(!ui.enh_hover && !ui.enh_undo && ui.enh_title && !ui.enh_wheel &&
+               ui.enh_pick, "2026 prefs round trip");
+        remove(path);
+        ui.enh_hover = 1;
+        ui.enh_undo = 1;
+        ui.enh_title = 1;
+        ui.enh_wheel = 1;
+        ui.enh_pick = 1;
+        ui_cfg_load(&ui, "/tmp/dpaint2026-missing.cfg");
+        expect(ui.enh_hover && ui.enh_undo && ui.enh_title && ui.enh_wheel &&
+               ui.enh_pick, "missing prefs file keeps the defaults");
+    }
     doc_set_undo_hist(&doc, 0);
     doc_set_undo_hist(&doc, 1);
     doc_clear(&doc);

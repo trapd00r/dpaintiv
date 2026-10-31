@@ -6,6 +6,7 @@ tools/fs-uae/
 tools/fs-uae-*/
 *.o
 dpaint
+dpaint2026.cfg
 smoke
 notes/decomp/
 animations/
