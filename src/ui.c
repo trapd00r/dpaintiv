@@ -520,6 +520,7 @@ void ui_init(Ui *u)
     u->enh_undo = 1;
     u->enh_title = 1;
     u->enh_wheel = 1;
+    u->enh_pick = 1;
 }
 
 static const DpFont *font(const DpAssets *a, const Ui *u)
@@ -2894,6 +2895,7 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
         u->enh_edit_undo = u->enh_undo;
         u->enh_edit_title = u->enh_title;
         u->enh_edit_wheel = u->enh_wheel;
+        u->enh_edit_pick = u->enh_pick;
         u->enh_open = 1;
         break;
     case A_ARRANGE:
@@ -3811,11 +3813,12 @@ static void draw_hover(const Ui *u, const Doc *d, const DpAssets *a,
     dp_font_rgb(f, rgb, w, h, (bx + 2) * s, (by + 1) * s, text, 0, 0, 0, s);
 }
 
-static const char *const enh_name[4] = {
+static const char *const enh_name[5] = {
     "Hover help",
     "Undo history",
     "Title frame readout",
-    "Mouse wheel colors"
+    "Mouse wheel colors",
+    "Pick from page"
 };
 
 static void enh_geom(const Ui *u, int *bx, int *by, int *bw, int *bh,
@@ -3824,7 +3827,7 @@ static void enh_geom(const Ui *u, int *bx, int *by, int *bw, int *bh,
     int lw = log_w(u);
     int lh = log_h(u);
     *bw = 196;
-    *bh = 102;
+    *bh = 118;
     *bx = (lw - *bw) / 2;
     if (*bx < 4) {
         *bx = 4;
@@ -3852,18 +3855,23 @@ static int enh_flag(const Ui *u, int i)
     if (i == 2) {
         return u->enh_edit_title;
     }
-    return u->enh_edit_wheel;
+    if (i == 3) {
+        return u->enh_edit_wheel;
+    }
+    return u->enh_edit_pick;
 }
 
 static void enh_toggle(Ui *u, int i)
 {
-    int *p = &u->enh_edit_wheel;
+    int *p = &u->enh_edit_pick;
     if (i == 0) {
         p = &u->enh_edit_hover;
     } else if (i == 1) {
         p = &u->enh_edit_undo;
     } else if (i == 2) {
         p = &u->enh_edit_title;
+    } else if (i == 3) {
+        p = &u->enh_edit_wheel;
     }
     *p = !*p;
 }
@@ -3875,6 +3883,7 @@ static void enh_apply(Ui *u, Doc *d)
     u->enh_undo = u->enh_edit_undo ? 1 : 0;
     u->enh_title = u->enh_edit_title ? 1 : 0;
     u->enh_wheel = u->enh_edit_wheel ? 1 : 0;
+    u->enh_pick = u->enh_edit_pick ? 1 : 0;
     if (!u->enh_wheel) {
         u->wheel_ms = 0;
     }
@@ -3903,7 +3912,7 @@ static void draw_enh(const Ui *u, const DpAssets *a, uint8_t *rgb, int w, int h)
     fill_rect(rgb, w, h, bx * s, by * s, bw * s, 12 * s, 20, 70, 180);
     dp_font_rgb(f, rgb, w, h, (bx + 6) * s, (by + 2) * s, "2026 version",
                 255, 255, 255, s);
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < 5; i++) {
         int y = by + 18 + i * 16;
         int on = enh_flag(u, i);
         fill_rect(rgb, w, h, (bx + 8) * s, y * s, 9 * s, 9 * s, 255, 255, 255);
@@ -3936,7 +3945,7 @@ static int enh_click(Ui *u, Doc *d, int lx, int ly)
         u->enh_open = 0;
         return 1;
     }
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < 5; i++) {
         int y = by + 18 + i * 16;
         if (lx >= bx + 8 && lx < bx + bw - 8 && ly >= y && ly < y + 12) {
             enh_toggle(u, i);
@@ -4693,6 +4702,25 @@ void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down)
         doc_status(d, "Magnify");
         return;
     }
+    if (down && u->enh_pick && !u->prompt &&
+        !(u->text_on && d->tool == TOOL_TEXT) &&
+        (button == 2 || (button == 1 && u->mod_alt))) {
+        int idx = d->frames[d->cur].pix[py * page_w(d) + px];
+        if (idx < 0 || idx >= DP_MAX_COLORS) {
+            idx = 0;
+        }
+        d->fg = idx;
+        u->wheel_x = mx;
+        u->wheel_y = my;
+        u->wheel_ms = 500;
+        u->pointer_x = mx;
+        u->pointer_y = my;
+        u->pointer_seen = 1;
+        return;
+    }
+    if (button == 2) {
+        return;
+    }
     grid_snap(d, &px, &py);
     if (u->gesture == GS_BEND && d->tool == TOOL_CURVE) {
         doc_preview_restore(d);
@@ -5107,7 +5135,7 @@ static void draw_wheel_swatch(const Ui *u, const Doc *d, uint8_t *rgb, int w, in
 {
     int x, y, side, fi, fr, fg, fb;
     DpColor c;
-    if (!u->enh_wheel || u->wheel_ms <= 0) {
+    if (u->wheel_ms <= 0) {
         return;
     }
     fi = d->fg;

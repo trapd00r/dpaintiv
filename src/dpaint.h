@@ -201,11 +201,14 @@ typedef struct {
     int enh_undo;
     int enh_title;
     int enh_wheel;
+    int enh_pick;
     int enh_open;
     int enh_edit_hover;
     int enh_edit_undo;
     int enh_edit_title;
     int enh_edit_wheel;
+    int enh_edit_pick;
+    int mod_alt;
     int wheel_ms;
     int wheel_x;
     int wheel_y;

@@ -1389,8 +1389,8 @@ int main(void)
             free(rgb);
         }
     }
-    expect(ui.enh_hover && ui.enh_undo && ui.enh_title && ui.enh_wheel,
-           "2026 toggles default on");
+    expect(ui.enh_hover && ui.enh_undo && ui.enh_title && ui.enh_wheel &&
+           ui.enh_pick, "2026 toggles default on");
     doc.fg = 0;
     ui.arrange = 0;
     ui.prompt = 0;
@@ -1406,6 +1406,27 @@ int main(void)
     expect(doc.fg == 0, "wheel off leaves the color");
     ui.enh_wheel = 1;
     ui.wheel_ms = 0;
+    {
+        int fw = doc.frames[doc.cur].w;
+        int px = 6;
+        int py = 6;
+        doc.frames[doc.cur].pix[py * fw + px] = 7;
+        doc.fg = 1;
+        ui.enh_pick = 1;
+        ui.prompt = 0;
+        ui.text_on = 0;
+        ui.arrange = 0;
+        ui.scale = 1;
+        ui_mouse(&ui, &doc, &assets, px, py + 10, 2, 1);
+        ui_mouse(&ui, &doc, &assets, px, py + 10, 2, 0);
+        expect(doc.fg == 7, "middle-click picks the page color");
+        doc.fg = 1;
+        ui.enh_pick = 0;
+        ui_mouse(&ui, &doc, &assets, px, py + 10, 2, 1);
+        expect(doc.fg == 1, "pick off leaves the color");
+        ui.enh_pick = 1;
+        ui.wheel_ms = 0;
+    }
     doc_set_undo_hist(&doc, 0);
     doc_set_undo_hist(&doc, 1);
     doc_clear(&doc);

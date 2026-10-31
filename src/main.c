@@ -221,6 +221,7 @@ int main(int argc, char **argv)
                 rgb = (uint8_t *)malloc((size_t)win_w * (size_t)win_h * 3u);
             } else if (ev.type == SDL_MOUSEBUTTONDOWN ||
                        ev.type == SDL_MOUSEBUTTONUP) {
+                ui.mod_alt = (SDL_GetModState() & KMOD_ALT) ? 1 : 0;
                 ui_mouse(&ui, &doc, &assets, ev.button.x, ev.button.y,
                          ev.button.button, ev.type == SDL_MOUSEBUTTONDOWN);
                 apply_pointer(win, ui.cursor_cross);
