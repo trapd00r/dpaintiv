@@ -195,6 +195,7 @@ typedef struct {
     int lt_prev;
     int lt_next;
     int lt_two;
+    int lt_spare;
     int hover_id;
     int hover_ms;
     int enh_hover;

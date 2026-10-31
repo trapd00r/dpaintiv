@@ -1325,6 +1325,53 @@ int main(void)
         ui.lt_dim = 1;
         doc.bg = 0;
     }
+    {
+        int x, y, fw, er, eg, eb;
+        uint8_t *rgb;
+        DpColor ink, paper;
+        const uint8_t *sp;
+        fw = doc.frames[0].w;
+        doc_goto(&doc, 0);
+        doc.bg = 0;
+        doc.frames[0].pix[9 * fw + 9] = 0;
+        expect(doc.spare.pix != NULL && doc.spare.w == fw, "spare page matches the frame");
+        if (doc.spare.pix != NULL && doc.spare.w == fw) {
+            doc.spare.pix[9 * fw + 9] = 4;
+        }
+        ui.panel = 1;
+        ui.lt_on = 0;
+        ui.lt_prev = 0;
+        ui.lt_next = 0;
+        ui.lt_two = 0;
+        ui.lt_spare = 0;
+        ui.lt_dim = 1;
+        ui.scale = 1;
+        ui.win_w = 800;
+        ui.win_h = 360;
+        ui.scroll_x = 0;
+        ui.scroll_y = 0;
+        expect(ui_panel_point(&ui, 14, &x, &y) == 0, "spare point");
+        ui_mouse(&ui, &doc, &assets, x, y, 1, 1);
+        ui_mouse(&ui, &doc, &assets, x, y, 1, 0);
+        expect(ui.lt_spare && ui.lt_on, "spare is the light-table source");
+        ink = doc.pal[4];
+        paper = doc.pal[0];
+        er = (ink.r + paper.r) / 2;
+        eg = (ink.g + paper.g) / 2;
+        eb = (ink.b + paper.b) / 2;
+        rgb = (uint8_t *)malloc(800u * 360u * 3u);
+        expect(rgb != NULL, "spare light table buffer");
+        if (rgb != NULL) {
+            ui_render(&ui, &doc, &assets, rgb, 800, 360);
+            sp = rgb + (((10 + 9) * 800 + 9) * 3);
+            expect(sp[0] == (uint8_t)er && sp[1] == (uint8_t)eg && sp[2] == (uint8_t)eb,
+                   "spare shines through the paper");
+            free(rgb);
+        }
+        ui.lt_on = 0;
+        ui.lt_spare = 0;
+        ui.panel = 0;
+    }
     doc_clear(&doc);
     doc.fg = 4;
     doc.bg = 0;

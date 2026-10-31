@@ -1311,38 +1311,48 @@ static void sample_page(const Ui *u, const Doc *d, int px, int py, DpColor *c)
     if (px >= 0 && py >= 0 && px < fr->w && py < fr->h && fr->pix != NULL) {
         idx = fr->pix[py * fr->w + px];
     }
-    if (u->lt_on && d->nframes > 1 && idx == (uint8_t)d->bg && fr->pix != NULL) {
-        int which[3];
-        int n = 0;
-        int k;
-        if (u->lt_two) {
-            which[n++] = d->cur - 2;
-        }
-        if (u->lt_prev) {
-            which[n++] = d->cur - 1;
-        }
-        if (u->lt_next) {
-            which[n++] = d->cur + 1;
-        }
-        for (k = n - 1; k >= 0; k--) {
-            int fi = which[k];
-            const DpFrame *src;
-            int o;
-            while (fi < 0) {
-                fi += d->nframes;
+    if (u->lt_on && idx == (uint8_t)d->bg && fr->pix != NULL) {
+        if (d->nframes > 1) {
+            int which[3];
+            int n = 0;
+            int k;
+            if (u->lt_two) {
+                which[n++] = d->cur - 2;
             }
-            while (fi >= d->nframes) {
-                fi -= d->nframes;
+            if (u->lt_prev) {
+                which[n++] = d->cur - 1;
             }
-            src = &d->frames[fi];
-            if (src->pix == NULL || src->w != fr->w || src->h != fr->h) {
-                continue;
+            if (u->lt_next) {
+                which[n++] = d->cur + 1;
             }
-            o = src->pix[py * fr->w + px];
+            for (k = n - 1; k >= 0; k--) {
+                int fi = which[k];
+                const DpFrame *src;
+                int o;
+                while (fi < 0) {
+                    fi += d->nframes;
+                }
+                while (fi >= d->nframes) {
+                    fi -= d->nframes;
+                }
+                src = &d->frames[fi];
+                if (src->pix == NULL || src->w != fr->w || src->h != fr->h) {
+                    continue;
+                }
+                o = src->pix[py * fr->w + px];
+                if (o != (uint8_t)d->bg) {
+                    idx = o;
+                    onion = 1;
+                    break;
+                }
+            }
+        }
+        if (!onion && u->lt_spare && d->spare.pix != NULL &&
+            d->spare.w == fr->w && d->spare.h == fr->h) {
+            int o = d->spare.pix[py * fr->w + px];
             if (o != (uint8_t)d->bg) {
                 idx = o;
                 onion = 1;
-                break;
             }
         }
     }
@@ -1421,7 +1431,7 @@ static int panel_hot(const Ui *u, const Doc *d, int i)
         return u->lt_next;
     }
     if (i == 14) {
-        return u->lt_dim;
+        return u->lt_spare;
     }
     return 0;
 }
@@ -1443,7 +1453,7 @@ static int picon_on(int kind, int x, int y)
         {0x3c, 0x42, 0x06, 0x0c, 0x18, 0x22, 0x7e, 0x00},
         {0x7c, 0x42, 0x42, 0x7c, 0x40, 0x40, 0x40, 0x00},
         {0x42, 0x62, 0x52, 0x4a, 0x46, 0x42, 0x00, 0x00},
-        {0x78, 0x44, 0x42, 0x42, 0x42, 0x44, 0x78, 0x00}
+        {0x3e, 0x40, 0x3c, 0x02, 0x7c, 0x00, 0x00, 0x00}
     };
     if (kind < 0 || kind >= PANEL_BTNS || x < 0 || y < 0 || x >= 8 || y >= 8) {
         return 0;
@@ -3737,7 +3747,7 @@ static int hover_info(const Ui *u, const Doc *d, int id,
         "Two back",
         "Table previous",
         "Table next",
-        "Dim"
+        "Spare"
     };
     *above = 0;
     if (id <= 0 || text == NULL || n < 8) {
@@ -4170,7 +4180,10 @@ static void panel_do(Ui *u, Doc *d, int i)
             u->lt_on = 1;
         }
     } else if (i == 14) {
-        u->lt_dim = !u->lt_dim;
+        u->lt_spare = !u->lt_spare;
+        if (u->lt_spare) {
+            u->lt_on = 1;
+        }
     }
 }
 
@@ -5033,6 +5046,11 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
     if ((key & 0xF00) == 0xA00 && (key & 255) == 'a') {
         u->panel = !u->panel;
         doc_status(d, u->panel ? "Panel On" : "Panel Off");
+        return;
+    }
+    if ((key & 0xF00) == 0xA00 && (key & 255) == '1') {
+        u->lt_dim = !u->lt_dim;
+        doc_status(d, u->lt_dim ? "Dim" : "Dim off");
         return;
     }
     if (ch == '3') {
