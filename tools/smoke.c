@@ -1714,6 +1714,55 @@ int main(void)
             free(rgb);
         }
     }
+    {
+        int fw, x, i;
+        doc.tool = TOOL_BRUSH;
+        doc.mode = MODE_MATTE;
+        doc.bg = 0;
+        doc.grid_on = 0;
+        doc.sym_on = 0;
+        ui.panel = 0;
+        ui.arrange = 0;
+        ui.prompt = 0;
+        ui.text_on = 0;
+        ui.magnify = 0;
+        ui.mag_arm = 0;
+        ui.scale = 1;
+        ui.win_w = 800;
+        ui.win_h = 360;
+        ui.scroll_x = 0;
+        ui.scroll_y = 0;
+        ui.ab_cels = 1;
+        doc_goto(&doc, 0);
+        while (doc.nframes < 3) {
+            doc_goto(&doc, doc.nframes - 1);
+            expect(doc_add_frames(&doc, 1, 1) == 0, "animbrush frame");
+        }
+        doc_goto(&doc, 0);
+        fw = doc.frames[0].w;
+        for (i = 0; i < 3; i++) {
+            for (x = 2; x <= 8; x++) {
+                doc.frames[i].pix[2 * fw + x] = (uint8_t)(4 + i);
+            }
+        }
+        ui_mouse(&ui, &doc, &assets, 2, 12, 1, 1);
+        ui_motion(&ui, &doc, &assets, 8, 12, 1);
+        ui_mouse(&ui, &doc, &assets, 8, 12, 1, 0);
+        expect(ui.prompt != 0 && strcmp(ui.text, "1") == 0, "animbrush asks, default 1");
+        ui_key(&ui, &doc, &assets, KEY_BACK, 0);
+        ui_key(&ui, &doc, &assets, '3', '3');
+        ui_key(&ui, &doc, &assets, KEY_ENTER, 0);
+        expect(doc.nabrush == 3 && doc.cur == 0, "animbrush has 3 cels");
+        ui_mouse(&ui, &doc, &assets, 20, 20, 1, 1);
+        ui_mouse(&ui, &doc, &assets, 20, 20, 1, 0);
+        expect(doc.frames[0].pix[10 * fw + 20] == 4, "stamp cel 0");
+        ui_mouse(&ui, &doc, &assets, 22, 20, 1, 1);
+        ui_mouse(&ui, &doc, &assets, 22, 20, 1, 0);
+        expect(doc.frames[0].pix[10 * fw + 22] == 5, "stamp cel 1");
+        ui_mouse(&ui, &doc, &assets, 24, 20, 1, 1);
+        ui_mouse(&ui, &doc, &assets, 24, 20, 1, 0);
+        expect(doc.frames[0].pix[10 * fw + 24] == 6 && doc.cur == 0, "stamp cel 2");
+    }
     printf("smoke %s (%d fails) ppm %s\n", fails ? "FAILED" : "ok", fails, ppm);
     free(snap);
     doc_free(&doc);

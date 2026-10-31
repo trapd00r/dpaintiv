@@ -56,7 +56,7 @@ enum {
     A_MODE,
     A_LOAD_ANIM, A_SAVE_ANIM, A_ADD, A_COPYF, A_DELF, A_SETN, A_RATE, A_RANGE,
     A_PREV, A_NEXT, A_GOTO, A_PLAY, A_ONCE, A_PING, A_COMP, A_EXP,
-    A_AB_LOAD, A_AB_SAVE, A_AB_PICK, A_AB_FREE,
+    A_AB_LOAD, A_AB_SAVE, A_AB_PICK, A_AB_FREE, A_AB_CELS,
     A_ST_MAKE, A_ST_REMAKE, A_ST_PAINT, A_ST_SHOW, A_ST_REV, A_ST_ON, A_ST_FREE,
     A_ST_LOAD, A_ST_SAVE,
     A_CYCLE, A_USEPAL, A_RESTORE_PAL, A_DEFAULT_PAL, A_BG_FG, A_SWAP_FG,
@@ -521,6 +521,7 @@ void ui_init(Ui *u)
     u->enh_title = 1;
     u->enh_wheel = 1;
     u->enh_pick = 1;
+    u->ab_cels = 1;
 }
 
 void ui_cfg_path(char *dst, int n)
@@ -2339,24 +2340,38 @@ static void save_brush(Doc *d, const char *path)
     doc_status(d, "Save");
 }
 
-static void pick_animbrush(Doc *d)
+static void free_anims(Doc *d)
 {
-    int i, n, x, y;
-    if (!d->pick_ok) {
-        doc_status(d, "Must have user-defined brush.");
-        return;
-    }
-    n = d->nframes - d->cur;
-    if (n > 16) {
-        n = 16;
-    }
-    if (n < 1) {
-        return;
-    }
+    int i;
     for (i = 0; i < d->nabrush; i++) {
         brush_free(&d->abrush[i]);
     }
     d->nabrush = 0;
+    d->abrush_i = 0;
+}
+
+static void pick_animbrush(Doc *d, int n)
+{
+    int i, x, y, avail;
+    if (!d->pick_ok) {
+        doc_status(d, "Must have user-defined brush.");
+        return;
+    }
+    avail = d->nframes - d->cur;
+    if (n < 1) {
+        n = 1;
+    }
+    if (n > avail) {
+        n = avail;
+    }
+    if (n > 16) {
+        n = 16;
+    }
+    free_anims(d);
+    if (n <= 1) {
+        doc_status(d, "Brush");
+        return;
+    }
     for (i = 0; i < n; i++) {
         DpBrush *b = &d->abrush[i];
         uint8_t *p = (uint8_t *)malloc((size_t)d->pick_w * (size_t)d->pick_h);
@@ -2424,6 +2439,20 @@ static void begin_prompt(Ui *u, Doc *d, int act, const char *label)
         }
     }
     doc_status(d, label);
+}
+
+static void ask_cels(Ui *u, Doc *d)
+{
+    int n = u->ab_cels;
+    if (n < 1) {
+        n = 1;
+    }
+    if (n > 16) {
+        n = 16;
+    }
+    begin_prompt(u, d, A_AB_CELS, "cels:");
+    snprintf(u->text, sizeof(u->text), "%d", n);
+    u->text_len = (int)strlen(u->text);
 }
 
 static void finish_prompt(Ui *u, Doc *d)
@@ -2558,6 +2587,17 @@ static void finish_prompt(Ui *u, Doc *d)
         n = atoi(path);
         doc_goto(d, n - 1);
         doc_status(d, "Go to Frame");
+        break;
+    case A_AB_CELS:
+        n = atoi(path);
+        if (n < 1) {
+            n = 1;
+        }
+        if (n > 16) {
+            n = 16;
+        }
+        u->ab_cels = n;
+        pick_animbrush(d, n);
         break;
     case A_RANGE:
         if (parse_pair(path, &a, &b) == 0) {
@@ -2884,7 +2924,13 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
         doc_status(d, "Expanded");
         break;
     case A_AB_PICK:
-        pick_animbrush(d);
+        if (!d->pick_ok) {
+            doc_status(d, "Must have user-defined brush.");
+        } else if (d->nframes > 1) {
+            ask_cels(u, d);
+        } else {
+            pick_animbrush(d, 1);
+        }
         break;
     case A_AB_FREE:
         for (i = 0; i < d->nabrush; i++) {
@@ -4651,6 +4697,13 @@ void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down)
                 }
             } else {
                 doc_pickup(d, u->ax, u->ay, u->lx, u->ly);
+                free_anims(d);
+                u->gesture = GS_NONE;
+                u->stroking = 0;
+                if (d->pick_ok && d->nframes > 1) {
+                    ask_cels(u, d);
+                }
+                return;
             }
             u->gesture = GS_NONE;
             u->stroking = 0;

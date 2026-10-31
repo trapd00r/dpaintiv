@@ -210,6 +210,7 @@ typedef struct {
     int enh_edit_wheel;
     int enh_edit_pick;
     int mod_alt;
+    int ab_cels;
     int wheel_ms;
     int wheel_x;
     int wheel_y;
