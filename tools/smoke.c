@@ -1396,10 +1396,10 @@ int main(void)
     ui.prompt = 0;
     ui.text_on = 0;
     ui_wheel(&ui, &doc, 10, 10, 1);
-    expect(doc.fg == 1, "wheel up from 0 selects 1");
+    expect(doc.fg == 63, "wheel up from 0 wraps to the last color");
     doc.fg = 0;
     ui_wheel(&ui, &doc, 10, 10, -1);
-    expect(doc.fg == 63, "wheel down from 0 wraps to the last color");
+    expect(doc.fg == 1, "wheel down from 0 selects 1");
     ui.enh_wheel = 0;
     doc.fg = 0;
     ui_wheel(&ui, &doc, 10, 10, 1);

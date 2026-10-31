@@ -5084,9 +5084,9 @@ void ui_wheel(Ui *u, Doc *d, int mx, int my, int dy)
     }
     c = d->fg;
     if (dy > 0) {
-        c++;
-    } else {
         c--;
+    } else {
+        c++;
     }
     if (c < 0) {
         c = n - 1;
