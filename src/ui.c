@@ -566,6 +566,18 @@ static void fill_rect(uint8_t *rgb, int w, int h, int x, int y, int rw, int rh,
     }
 }
 
+static void color_frame(uint8_t *rgb, int w, int h, int x, int y, int side, int s,
+                        int thick, uint8_t r, uint8_t g, uint8_t b)
+{
+    if (thick < 1 || side <= thick * 2 || s < 1) {
+        return;
+    }
+    fill_rect(rgb, w, h, x * s, y * s, side * s, thick * s, r, g, b);
+    fill_rect(rgb, w, h, x * s, (y + side - thick) * s, side * s, thick * s, r, g, b);
+    fill_rect(rgb, w, h, x * s, y * s, thick * s, side * s, r, g, b);
+    fill_rect(rgb, w, h, (x + side - thick) * s, y * s, thick * s, side * s, r, g, b);
+}
+
 static int item_checked(const Ui *u, const Doc *d, const Item *it)
 {
     if (it->act == A_MODE) {
@@ -1660,11 +1672,16 @@ void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
         int dx, dy, mark_row, mark_col, mag_row, mag_col, brow;
         int row_y0[NSTRIP_ROWS], row_y1[NSTRIP_ROWS];
         int fi = d->fg;
-        DpColor fgc;
+        int bi = d->bg;
+        DpColor fgc, bgcol;
         if (fi < 0 || fi >= DP_MAX_COLORS) {
             fi = 0;
         }
+        if (bi < 0 || bi >= DP_MAX_COLORS) {
+            bi = 0;
+        }
         fgc = d->pal[fi];
+        bgcol = d->pal[bi];
         strip_metrics(u, d->ncolors, &tx, &twide, &ix, &iy, &iw, &ih, &bhh,
                       &px0, &py0, NULL, NULL, &cw);
         mark_row = -1;
@@ -1738,8 +1755,19 @@ void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
             by = iy + ih;
             fill_rect(rgb, w, h, bx * s, by * s, bw * s, BAR_H * s, 0, 0, 0);
             if (BAR_H > 2 && bw > 2) {
-                fill_rect(rgb, w, h, (bx + 1) * s, (by + 1) * s, (bw - 2) * s,
+                int gap = 3;
+                int fgw = bw - 2;
+                if (fgw > gap + 4) {
+                    fgw -= gap;
+                } else {
+                    gap = 0;
+                }
+                fill_rect(rgb, w, h, (bx + 1) * s, (by + 1) * s, fgw * s,
                           (BAR_H - 2) * s, fgc.r, fgc.g, fgc.b);
+                if (gap > 0) {
+                    fill_rect(rgb, w, h, (bx + 1 + fgw) * s, (by + 1) * s, gap * s,
+                              (BAR_H - 2) * s, bgcol.r, bgcol.g, bgcol.b);
+                }
             }
         }
         for (i = 0; i < d->ncolors; i++) {
@@ -1753,21 +1781,20 @@ void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
             }
             fill_rect(rgb, w, h, cx * s, cy * s, cw * s, cw * s,
                       d->pal[i].r, d->pal[i].g, d->pal[i].b);
-            if (i == d->fg && cw > 2) {
+            if ((i == d->fg || i == d->bg) && cw > 2) {
                 int br = 255, bgc = 255, bb = 255;
+                int thick = (i == d->bg) ? 2 : 1;
                 if (d->pal[i].r + d->pal[i].g + d->pal[i].b > 600) {
                     br = 0;
                     bgc = 0;
                     bb = 0;
                 }
-                fill_rect(rgb, w, h, cx * s, cy * s, cw * s, s,
-                          (uint8_t)br, (uint8_t)bgc, (uint8_t)bb);
-                fill_rect(rgb, w, h, cx * s, (cy + cw - 1) * s, cw * s, s,
-                          (uint8_t)br, (uint8_t)bgc, (uint8_t)bb);
-                fill_rect(rgb, w, h, cx * s, cy * s, s, cw * s,
-                          (uint8_t)br, (uint8_t)bgc, (uint8_t)bb);
-                fill_rect(rgb, w, h, (cx + cw - 1) * s, cy * s, s, cw * s,
-                          (uint8_t)br, (uint8_t)bgc, (uint8_t)bb);
+                color_frame(rgb, w, h, cx, cy, cw, s, thick,
+                            (uint8_t)br, (uint8_t)bgc, (uint8_t)bb);
+                if (i == d->fg && i != d->bg) {
+                    color_frame(rgb, w, h, cx, cy, cw, s, 1,
+                                (uint8_t)br, (uint8_t)bgc, (uint8_t)bb);
+                }
             }
         }
     }
@@ -4710,6 +4737,7 @@ void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down)
             idx = 0;
         }
         d->fg = idx;
+        u->wheel_bg = 0;
         u->wheel_x = mx;
         u->wheel_y = my;
         u->wheel_ms = 500;
@@ -5100,17 +5128,19 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
     }
 }
 
-void ui_wheel(Ui *u, Doc *d, int mx, int my, int dy)
+void ui_wheel(Ui *u, Doc *d, int mx, int my, int dy, int shift)
 {
     int n = DP_MAX_COLORS;
     int c;
+    int *slot;
     if (dy == 0 || !u->enh_wheel || u->arrange) {
         return;
     }
     if (u->prompt || (u->text_on && d->tool == TOOL_TEXT)) {
         return;
     }
-    c = d->fg;
+    slot = shift ? &d->bg : &d->fg;
+    c = *slot;
     if (dy > 0) {
         c--;
     } else {
@@ -5122,7 +5152,8 @@ void ui_wheel(Ui *u, Doc *d, int mx, int my, int dy)
     if (c >= n) {
         c = 0;
     }
-    d->fg = c;
+    *slot = c;
+    u->wheel_bg = shift ? 1 : 0;
     u->wheel_x = mx;
     u->wheel_y = my;
     u->wheel_ms = 500;
@@ -5138,7 +5169,7 @@ static void draw_wheel_swatch(const Ui *u, const Doc *d, uint8_t *rgb, int w, in
     if (u->wheel_ms <= 0) {
         return;
     }
-    fi = d->fg;
+    fi = u->wheel_bg ? d->bg : d->fg;
     if (fi < 0 || fi >= DP_MAX_COLORS) {
         return;
     }

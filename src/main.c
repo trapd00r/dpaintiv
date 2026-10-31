@@ -234,7 +234,8 @@ int main(int argc, char **argv)
                 if (ev.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
                     dy = -dy;
                 }
-                ui_wheel(&ui, &doc, ev.wheel.mouseX, ev.wheel.mouseY, dy);
+                ui_wheel(&ui, &doc, ev.wheel.mouseX, ev.wheel.mouseY, dy,
+                         (SDL_GetModState() & KMOD_SHIFT) ? 1 : 0);
             } else if (ev.type == SDL_TEXTINPUT) {
                 const char *s = ev.text.text;
                 int typing = ui.prompt || (ui.text_on && doc.tool == TOOL_TEXT);
