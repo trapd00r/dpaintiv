@@ -223,6 +223,8 @@ typedef struct {
     int arr_undo_ok;
     DpColor arr_open[DP_MAX_COLORS];
     DpColor arr_undo[DP_MAX_COLORS];
+    int bend_horiz;
+    int place_handle;
 } Ui;
 
 enum {
@@ -330,6 +332,11 @@ void brush_flip(DpBrush *b, int horiz);
 void brush_rot90(DpBrush *b);
 void brush_scale(DpBrush *b, int nw, int nh);
 void brush_outline(DpBrush *b, int color);
+void brush_trim(DpBrush *b);
+void brush_shear(DpBrush *b, int sx, int sy);
+void brush_rotate_angle(DpBrush *b, int deg);
+void brush_bend(DpBrush *b, int horiz, int amount);
+int brush_metamorph(Doc *d, int steps);
 
 int iff_write_png(const char *path, const uint8_t *pix, int w, int h,
                   const DpColor *pal, int ncolors);

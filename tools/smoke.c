@@ -1763,6 +1763,29 @@ int main(void)
         ui_mouse(&ui, &doc, &assets, 24, 20, 1, 0);
         expect(doc.frames[0].pix[10 * fw + 24] == 6 && doc.cur == 0, "stamp cel 2");
     }
+    {
+        doc_clear(&doc);
+        doc.fg = 4;
+        doc.bg = 0;
+        doc_rect(&doc, 4, 4, 10, 10, 4, 1);
+        doc_pickup(&doc, 2, 2, 12, 12);
+        expect(doc.brush.w == 11 && doc.brush.h == 11, "padded brush before trim");
+        brush_trim(&doc.brush);
+        expect(doc.brush.w == 7 && doc.brush.h == 7, "trim removes transparent border");
+        brush_trim(&doc.brush);
+        expect(doc.brush.w == 5 && doc.brush.h == 5, "second trim peels 1px rim");
+        expect(brush_clone(&doc.brush_spare, &doc.brush) == 0, "clone to spare");
+        doc.brush_spare_ok = 1;
+        brush_scale(&doc.brush_spare, 9, 9);
+        expect(brush_metamorph(&doc, 4) == 0 && doc.nabrush == 4, "metamorph creates 4 cels");
+        expect(doc.abrush[0].w == 5 && doc.abrush[3].w == 9, "metamorph interpolates size");
+        brush_shear(&doc.brush, 3, 0);
+        expect(doc.brush.w == 8 && doc.brush.h == 5, "shear widens brush");
+        brush_rotate_angle(&doc.brush, 30);
+        expect(doc.brush.w >= 8 && doc.brush.h >= 7, "any-angle rotate bounds");
+        brush_bend(&doc.brush, 1, 3);
+        expect(doc.brush.h >= 10, "bend horiz arches brush");
+    }
     printf("smoke %s (%d fails) ppm %s\n", fails ? "FAILED" : "ok", fails, ppm);
     free(snap);
     doc_free(&doc);

@@ -1,5 +1,6 @@
 #include "dpaint.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -680,6 +681,27 @@ static int range_of(const Doc *d, int *lo, int *hi)
         *hi = *lo;
     }
     return 1;
+}
+
+static int blend_idx(const Doc *d, int c_dst, int c_src, int pct)
+{
+    int r, g, b;
+    if (c_dst < 0 || c_dst >= d->ncolors) {
+        c_dst = 0;
+    }
+    if (c_src < 0 || c_src >= d->ncolors) {
+        c_src = 0;
+    }
+    if (pct <= 0) {
+        return c_dst;
+    }
+    if (pct >= 100) {
+        return c_src;
+    }
+    r = ((int)d->pal[c_src].r * pct + (int)d->pal[c_dst].r * (100 - pct)) / 100;
+    g = ((int)d->pal[c_src].g * pct + (int)d->pal[c_dst].g * (100 - pct)) / 100;
+    b = ((int)d->pal[c_src].b * pct + (int)d->pal[c_dst].b * (100 - pct)) / 100;
+    return doc_nearest(d, r, g, b);
 }
 
 void doc_plot(Doc *d, int x, int y, int color)
@@ -1436,6 +1458,298 @@ void brush_outline(DpBrush *b, int color)
     }
     memcpy(b->pix, tmp, (size_t)b->w * (size_t)b->h);
     free(tmp);
+}
+
+void brush_trim(DpBrush *b)
+{
+    uint8_t *tmp;
+    int x, y, has_inner = 0;
+    int x0, y0, x1 = -1, y1 = -1;
+    if (b == NULL || b->pix == NULL || b->w < 1 || b->h < 1) {
+        return;
+    }
+    x0 = b->w;
+    y0 = b->h;
+    for (y = 0; y < b->h; y++) {
+        for (x = 0; x < b->w; x++) {
+            if (b->pix[y * b->w + x] != b->trans) {
+                if (x < x0) {
+                    x0 = x;
+                }
+                if (y < y0) {
+                    y0 = y;
+                }
+                if (x > x1) {
+                    x1 = x;
+                }
+                if (y > y1) {
+                    y1 = y;
+                }
+            }
+        }
+    }
+    if (x1 >= x0 && y1 >= y0 &&
+        (x0 > 0 || y0 > 0 || x1 < b->w - 1 || y1 < b->h - 1)) {
+        int nw = x1 - x0 + 1;
+        int nh = y1 - y0 + 1;
+        tmp = (uint8_t *)malloc((size_t)nw * (size_t)nh);
+        if (tmp != NULL) {
+            for (y = 0; y < nh; y++) {
+                memcpy(tmp + y * nw, b->pix + (y0 + y) * b->w + x0, (size_t)nw);
+            }
+            free(b->pix);
+            b->pix = tmp;
+            b->w = nw;
+            b->h = nh;
+            b->hx = b->hx - x0;
+            b->hy = b->hy - y0;
+            if (b->hx < 0 || b->hx >= nw) {
+                b->hx = nw / 2;
+            }
+            if (b->hy < 0 || b->hy >= nh) {
+                b->hy = nh / 2;
+            }
+        }
+        return;
+    }
+    for (y = 0; y < b->h; y++) {
+        for (x = 0; x < b->w; x++) {
+            if (b->pix[y * b->w + x] == b->trans) {
+                continue;
+            }
+            if (x > 0 && x < b->w - 1 && y > 0 && y < b->h - 1 &&
+                b->pix[(y - 1) * b->w + x] != b->trans &&
+                b->pix[(y + 1) * b->w + x] != b->trans &&
+                b->pix[y * b->w + (x - 1)] != b->trans &&
+                b->pix[y * b->w + (x + 1)] != b->trans) {
+                has_inner = 1;
+            }
+        }
+    }
+    if (has_inner) {
+        tmp = (uint8_t *)malloc((size_t)b->w * (size_t)b->h);
+        if (tmp != NULL) {
+            for (y = 0; y < b->h; y++) {
+                for (x = 0; x < b->w; x++) {
+                    uint8_t c = b->pix[y * b->w + x];
+                    int keep = (c != b->trans && x > 0 && x < b->w - 1 &&
+                                y > 0 && y < b->h - 1 &&
+                                b->pix[(y - 1) * b->w + x] != b->trans &&
+                                b->pix[(y + 1) * b->w + x] != b->trans &&
+                                b->pix[y * b->w + (x - 1)] != b->trans &&
+                                b->pix[y * b->w + (x + 1)] != b->trans);
+                    tmp[y * b->w + x] = keep ? c : b->trans;
+                }
+            }
+            memcpy(b->pix, tmp, (size_t)b->w * (size_t)b->h);
+            free(tmp);
+        }
+        brush_trim(b);
+    }
+}
+
+void brush_shear(DpBrush *b, int sx, int sy)
+{
+    int asx, asy, nw, nh, x, y;
+    uint8_t *tmp;
+    if (b == NULL || b->pix == NULL || (sx == 0 && sy == 0)) {
+        return;
+    }
+    asx = sx < 0 ? -sx : sx;
+    asy = sy < 0 ? -sy : sy;
+    nw = b->w + asx;
+    nh = b->h + asy;
+    if (nw < 1 || nh < 1 || nw > 2000 || nh > 2000) {
+        return;
+    }
+    tmp = (uint8_t *)malloc((size_t)nw * (size_t)nh);
+    if (tmp == NULL) {
+        return;
+    }
+    memset(tmp, b->trans, (size_t)nw * (size_t)nh);
+    for (y = 0; y < b->h; y++) {
+        int ox = b->h > 1 ? ((sx >= 0 ? y : (b->h - 1 - y)) * asx) / (b->h - 1) : 0;
+        for (x = 0; x < b->w; x++) {
+            int oy = b->w > 1 ? ((sy >= 0 ? x : (b->w - 1 - x)) * asy) / (b->w - 1) : 0;
+            int dx = x + ox;
+            int dy = y + oy;
+            if (dx >= 0 && dx < nw && dy >= 0 && dy < nh) {
+                tmp[dy * nw + dx] = b->pix[y * b->w + x];
+            }
+        }
+    }
+    free(b->pix);
+    b->pix = tmp;
+    b->w = nw;
+    b->h = nh;
+    b->hx = nw / 2;
+    b->hy = nh / 2;
+}
+
+void brush_rotate_angle(DpBrush *b, int deg)
+{
+    double rad, ca, sa, scx, scy, dcx, dcy;
+    int nw, nh, dx, dy;
+    uint8_t *tmp;
+    if (b == NULL || b->pix == NULL) {
+        return;
+    }
+    deg %= 360;
+    if (deg == 0) {
+        return;
+    }
+    rad = (double)deg * 3.14159265358979323846 / 180.0;
+    ca = cos(rad);
+    sa = sin(rad);
+    nw = (int)ceil(fabs((double)b->w * ca) + fabs((double)b->h * sa));
+    nh = (int)ceil(fabs((double)b->w * sa) + fabs((double)b->h * ca));
+    if (nw < 1) {
+        nw = 1;
+    }
+    if (nh < 1) {
+        nh = 1;
+    }
+    if (nw > 2000 || nh > 2000) {
+        return;
+    }
+    tmp = (uint8_t *)malloc((size_t)nw * (size_t)nh);
+    if (tmp == NULL) {
+        return;
+    }
+    memset(tmp, b->trans, (size_t)nw * (size_t)nh);
+    scx = (double)(b->w - 1) * 0.5;
+    scy = (double)(b->h - 1) * 0.5;
+    dcx = (double)(nw - 1) * 0.5;
+    dcy = (double)(nh - 1) * 0.5;
+    for (dy = 0; dy < nh; dy++) {
+        for (dx = 0; dx < nw; dx++) {
+            double rx = (double)dx - dcx;
+            double ry = (double)dy - dcy;
+            int sx = (int)floor(rx * ca + ry * sa + scx + 0.5);
+            int sy = (int)floor(-rx * sa + ry * ca + scy + 0.5);
+            if (sx >= 0 && sx < b->w && sy >= 0 && sy < b->h) {
+                tmp[dy * nw + dx] = b->pix[sy * b->w + sx];
+            }
+        }
+    }
+    free(b->pix);
+    b->pix = tmp;
+    b->w = nw;
+    b->h = nh;
+    b->hx = nw / 2;
+    b->hy = nh / 2;
+}
+
+void brush_bend(DpBrush *b, int horiz, int amount)
+{
+    int a, nw, nh, x, y;
+    uint8_t *tmp;
+    if (b == NULL || b->pix == NULL || amount == 0) {
+        return;
+    }
+    a = amount < 0 ? -amount : amount;
+    nw = horiz ? b->w : (b->w + a);
+    nh = horiz ? (b->h + a) : b->h;
+    if (nw < 1 || nh < 1 || nw > 2000 || nh > 2000) {
+        return;
+    }
+    tmp = (uint8_t *)malloc((size_t)nw * (size_t)nh);
+    if (tmp == NULL) {
+        return;
+    }
+    memset(tmp, b->trans, (size_t)nw * (size_t)nh);
+    for (y = 0; y < b->h; y++) {
+        for (x = 0; x < b->w; x++) {
+            double t = horiz ? (b->w > 1 ? (double)x / (b->w - 1) : 0.5)
+                             : (b->h > 1 ? (double)y / (b->h - 1) : 0.5);
+            double arch = 4.0 * t * (1.0 - t);
+            int shift = (int)floor((amount >= 0 ? arch : (1.0 - arch)) * a + 0.5);
+            int dx = horiz ? x : x + shift;
+            int dy = horiz ? y + shift : y;
+            if (dx >= 0 && dx < nw && dy >= 0 && dy < nh) {
+                tmp[dy * nw + dx] = b->pix[y * b->w + x];
+            }
+        }
+    }
+    free(b->pix);
+    b->pix = tmp;
+    b->w = nw;
+    b->h = nh;
+    b->hx = nw / 2;
+    b->hy = nh / 2;
+}
+
+int brush_metamorph(Doc *d, int steps)
+{
+    int i, x, y;
+    const DpBrush *src;
+    const DpBrush *dst;
+    if (d == NULL || d->brush.pix == NULL || !d->brush_spare_ok ||
+        d->brush_spare.pix == NULL) {
+        return -1;
+    }
+    if (steps < 2) {
+        steps = 2;
+    }
+    if (steps > 16) {
+        steps = 16;
+    }
+    for (i = 0; i < d->nabrush; i++) {
+        brush_free(&d->abrush[i]);
+    }
+    d->nabrush = 0;
+    d->abrush_i = 0;
+    src = &d->brush;
+    dst = &d->brush_spare;
+    for (i = 0; i < steps; i++) {
+        int num = i;
+        int den = steps - 1;
+        int cw = src->w + (dst->w - src->w) * num / den;
+        int ch = src->h + (dst->h - src->h) * num / den;
+        uint8_t *p;
+        DpBrush *cel = &d->abrush[i];
+        if (cw < 1) {
+            cw = 1;
+        }
+        if (ch < 1) {
+            ch = 1;
+        }
+        p = (uint8_t *)malloc((size_t)cw * (size_t)ch);
+        if (p == NULL) {
+            break;
+        }
+        for (y = 0; y < ch; y++) {
+            int sy = y * src->h / ch;
+            int dy = y * dst->h / ch;
+            for (x = 0; x < cw; x++) {
+                int sx = x * src->w / cw;
+                int dx = x * dst->w / cw;
+                uint8_t c0 = src->pix[sy * src->w + sx];
+                uint8_t c1 = dst->pix[dy * dst->w + dx];
+                int t0 = (c0 == src->trans);
+                int t1 = (c1 == dst->trans);
+                if (t0 && t1) {
+                    p[y * cw + x] = src->trans;
+                } else if (t0) {
+                    p[y * cw + x] = (num * 2 >= den) ? c1 : src->trans;
+                } else if (t1) {
+                    p[y * cw + x] = (num * 2 < den) ? c0 : src->trans;
+                } else {
+                    int pct = num * 100 / den;
+                    p[y * cw + x] = (uint8_t)blend_idx(d, c0, c1, pct);
+                }
+            }
+        }
+        memset(cel, 0, sizeof(*cel));
+        cel->pix = p;
+        cel->w = cw;
+        cel->h = ch;
+        cel->hx = cw / 2;
+        cel->hy = ch / 2;
+        cel->trans = src->trans;
+        d->nabrush++;
+    }
+    return d->nabrush > 0 ? 0 : -1;
 }
 
 static int refit_side(Doc *d, int w, int h)

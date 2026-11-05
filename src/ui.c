@@ -50,9 +50,12 @@ enum {
     A_LOAD_PIC, A_SAVE_PIC, A_DELETE, A_PRINT,
     A_FLIP_H, A_FLIP_V, A_SWAP, A_COPY_SPARE, A_MERGE_F, A_MERGE_B, A_DEL_PAGE,
     A_PAGE, A_SHOW, A_FMT_LO, A_FMT_MED, A_FMT_LACE, A_FMT_HI, A_ABOUT, A_QUIT,
-    A_LOAD_BR, A_SAVE_BR, A_RESTORE, A_BR_TO, A_BR_SWAP,
+    A_LOAD_BR, A_SAVE_BR, A_RESTORE, A_BR_TO, A_BR_SWAP, A_METAMORPH,
     A_STRETCH, A_HALVE, A_DOUBLE, A_DUBH, A_DUBV,
-    A_BFLIP_H, A_BFLIP_V, A_OUTLINE, A_ROT90, A_HANDLE_C, A_HANDLE_K,
+    A_BFLIP_H, A_BFLIP_V, A_OUTLINE, A_TRIM,
+    A_ROT90, A_ROT_ANGLE, A_SHEAR,
+    A_BEND_H, A_BEND_V,
+    A_HANDLE_C, A_HANDLE_K, A_HANDLE_P,
     A_MODE,
     A_LOAD_ANIM, A_SAVE_ANIM, A_ADD, A_COPYF, A_DELF, A_SETN, A_RATE, A_RANGE,
     A_PREV, A_NEXT, A_GOTO, A_PLAY, A_ONCE, A_PING, A_COMP, A_EXP,
@@ -105,40 +108,50 @@ static const Item picture_items[] = {
 };
 
 static const Item br_spare[] = {
-    {"Brush->Spare", A_BR_TO, 0, NULL, 0},
-    {"Brush<->Spare", A_BR_SWAP, 0, NULL, 0}
+    {"Brush->Spare", A_BR_TO, 0, NULL, 0, "(alt+n)"},
+    {"Brush<->Spare", A_BR_SWAP, 0, NULL, 0, "(alt+b)"},
+    {"Metamorph..", A_METAMORPH, 0, NULL, 0, "(alt+m)"}
 };
 static const Item br_size[] = {
-    {"Stretch", A_STRETCH, 0, NULL, 0},
-    {"Halve", A_HALVE, 0, NULL, 0},
-    {"Double", A_DOUBLE, 0, NULL, 0},
-    {"Double Horiz", A_DUBH, 0, NULL, 0},
-    {"Double Vert", A_DUBV, 0, NULL, 0}
+    {"Stretch", A_STRETCH, 0, NULL, 0, "(Z)"},
+    {"Halve", A_HALVE, 0, NULL, 0, "(h)"},
+    {"Double", A_DOUBLE, 0, NULL, 0, "(H)"},
+    {"Double Horiz", A_DUBH, 0, NULL, 0, "(X)"},
+    {"Double Vert", A_DUBV, 0, NULL, 0, "(Y)"}
 };
 static const Item br_flip[] = {
-    {"Horiz", A_BFLIP_H, 0, NULL, 0},
-    {"Vert", A_BFLIP_V, 0, NULL, 0}
+    {"Horiz", A_BFLIP_H, 0, NULL, 0, "(x)"},
+    {"Vert", A_BFLIP_V, 0, NULL, 0, "(y)"}
 };
 static const Item br_edge[] = {
-    {"Outline", A_OUTLINE, 0, NULL, 0}
+    {"Outline", A_OUTLINE, 0, NULL, 0, "(o)"},
+    {"Trim", A_TRIM, 0, NULL, 0, "(O)"}
 };
 static const Item br_rot[] = {
-    {"90 Degrees", A_ROT90, 0, NULL, 0}
+    {"90 Degrees", A_ROT90, 0, NULL, 0, "(z)"},
+    {"Any Angle", A_ROT_ANGLE, 0, NULL, 0},
+    {"Shear", A_SHEAR, 0, NULL, 0}
+};
+static const Item br_bend[] = {
+    {"Horiz", A_BEND_H, 0, NULL, 0},
+    {"Vert", A_BEND_V, 0, NULL, 0}
 };
 static const Item br_handle[] = {
-    {"Center", A_HANDLE_C, 0, NULL, 0},
-    {"Corner", A_HANDLE_K, 0, NULL, 0}
+    {"Center", A_HANDLE_C, 0, NULL, 0, "(alt+s)"},
+    {"Corner", A_HANDLE_K, 0, NULL, 0, "(alt+x)"},
+    {"Place", A_HANDLE_P, 0, NULL, 0, "(alt+z)"}
 };
 static const Item brush_items[] = {
     {"Load..", A_LOAD_BR, 0, NULL, 0},
     {"Save..", A_SAVE_BR, 0, NULL, 0},
-    {"Restore", A_RESTORE, 0, NULL, 0},
-    {"Spare", 0, 0, br_spare, 2},
+    {"Restore", A_RESTORE, 0, NULL, 0, "(B)"},
+    {"Spare", 0, 0, br_spare, 3},
     {"Size", 0, 0, br_size, 5},
     {"Flip", 0, 0, br_flip, 2},
-    {"Edge", 0, 0, br_edge, 1},
-    {"Rotate", 0, 0, br_rot, 1},
-    {"Handle", 0, 0, br_handle, 2}
+    {"Edge", 0, 0, br_edge, 2},
+    {"Rotate", 0, 0, br_rot, 3},
+    {"Bend", 0, 0, br_bend, 2},
+    {"Handle", 0, 0, br_handle, 3}
 };
 
 static const Item mode_items[] = {
@@ -279,7 +292,7 @@ typedef struct {
 
 static const MenuBar bars[] = {
     {"Picture", picture_items, 11},
-    {"Brush", brush_items, 9},
+    {"Brush", brush_items, 10},
     {"Mode", mode_items, 10},
     {"Anim", anim_items, 6},
     {"Color", color_items, 6},
@@ -670,10 +683,13 @@ static int item_checked(const Ui *u, const Doc *d, const Item *it)
         return !d->method_compressed;
     }
     if (it->act == A_HANDLE_C) {
-        return d->handle_center;
+        return d->handle_center && !u->place_handle;
     }
     if (it->act == A_HANDLE_K) {
-        return !d->handle_center;
+        return !d->handle_center && !u->place_handle;
+    }
+    if (it->act == A_HANDLE_P) {
+        return u->place_handle;
     }
     if (it->act == A_ST_ON || it->act == A_ST_PAINT) {
         return d->stencil_on;
@@ -860,6 +876,15 @@ static const char *req_title(int act)
         return "Page Size";
     case A_STRETCH:
         return "Stretch";
+    case A_ROT_ANGLE:
+        return "Any Angle";
+    case A_SHEAR:
+        return "Shear";
+    case A_BEND_H:
+    case A_BEND_V:
+        return "Bend";
+    case A_METAMORPH:
+        return "Metamorph";
     case A_ADD:
         return "Add Frames";
     case A_COPYF:
@@ -2536,6 +2561,43 @@ static void finish_prompt(Ui *u, Doc *d)
             doc_status(d, "Stretch");
         }
         break;
+    case A_ROT_ANGLE:
+        if (need_brush(d) == 0) {
+            n = atoi(path);
+            brush_rotate_angle(&d->brush, n != 0 ? n : 45);
+            doc_status(d, "Any Angle");
+        }
+        break;
+    case A_SHEAR:
+        if (need_brush(d) == 0) {
+            if (parse_pair(path, &a, &b) == 0) {
+                brush_shear(&d->brush, a, b);
+            } else {
+                n = atoi(path);
+                brush_shear(&d->brush, n != 0 ? n : 4, 0);
+            }
+            doc_status(d, "Shear");
+        }
+        break;
+    case A_BEND_H:
+    case A_BEND_V:
+        if (need_brush(d) == 0) {
+            n = atoi(path);
+            brush_bend(&d->brush, act == A_BEND_H, n != 0 ? n : 4);
+            doc_status(d, "Bend");
+        }
+        break;
+    case A_METAMORPH:
+        n = atoi(path);
+        if (n < 2) {
+            n = 4;
+        }
+        if (brush_metamorph(d, n) == 0) {
+            doc_status(d, "Metamorph");
+        } else {
+            doc_status(d, "Must have spare brush");
+        }
+        break;
     case A_ADD:
     case A_COPYF:
         n = atoi(path);
@@ -2783,7 +2845,21 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
             d->brush = d->brush_spare;
             d->brush_spare = t;
             doc_status(d, "Brush<->Spare");
+        } else {
+            doc_status(d, "Must have spare brush");
         }
+        break;
+    case A_METAMORPH:
+        if (need_brush(d) != 0) {
+            break;
+        }
+        if (!d->brush_spare_ok || d->brush_spare.pix == NULL) {
+            doc_status(d, "Must have spare brush");
+            break;
+        }
+        begin_prompt(u, d, A_METAMORPH, "# of Cels:");
+        snprintf(u->text, sizeof(u->text), "4");
+        u->text_len = 1;
         break;
     case A_STRETCH:
         begin_prompt(u, d, act, "Width:");
@@ -2831,14 +2907,44 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
             doc_status(d, "Outline");
         }
         break;
+    case A_TRIM:
+        if (need_brush(d) == 0) {
+            brush_trim(&d->brush);
+            doc_status(d, "Trim");
+        }
+        break;
     case A_ROT90:
         if (need_brush(d) == 0) {
             brush_rot90(&d->brush);
             doc_status(d, "90 Degrees");
         }
         break;
+    case A_ROT_ANGLE:
+        if (need_brush(d) == 0) {
+            begin_prompt(u, d, A_ROT_ANGLE, "Angle:");
+            snprintf(u->text, sizeof(u->text), "45");
+            u->text_len = 2;
+        }
+        break;
+    case A_SHEAR:
+        if (need_brush(d) == 0) {
+            begin_prompt(u, d, A_SHEAR, "Shear:");
+            snprintf(u->text, sizeof(u->text), "4");
+            u->text_len = 1;
+        }
+        break;
+    case A_BEND_H:
+    case A_BEND_V:
+        if (need_brush(d) == 0) {
+            u->bend_horiz = (act == A_BEND_H);
+            begin_prompt(u, d, act, "Bend:");
+            snprintf(u->text, sizeof(u->text), "4");
+            u->text_len = 1;
+        }
+        break;
     case A_HANDLE_C:
         d->handle_center = 1;
+        u->place_handle = 0;
         if (d->brush.pix) {
             d->brush.hx = d->brush.w / 2;
             d->brush.hy = d->brush.h / 2;
@@ -2847,11 +2953,18 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
         break;
     case A_HANDLE_K:
         d->handle_center = 0;
+        u->place_handle = 0;
         if (d->brush.pix) {
             d->brush.hx = 0;
             d->brush.hy = 0;
         }
         doc_status(d, "Corner");
+        break;
+    case A_HANDLE_P:
+        if (need_brush(d) == 0) {
+            u->place_handle = 1;
+            doc_status(d, "Place");
+        }
         break;
     case A_MODE:
         d->mode = arg;
@@ -4867,6 +4980,32 @@ void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down)
         return;
     }
     u->use_bg = color_button;
+    if (u->place_handle && button == 1) {
+        u->place_handle = 0;
+        if (d->brush.pix != NULL) {
+            if (d->pick_ok) {
+                d->brush.hx = px - d->pick_x;
+                d->brush.hy = py - d->pick_y;
+            } else {
+                d->brush.hx = px % d->brush.w;
+                d->brush.hy = py % d->brush.h;
+            }
+            if (d->brush.hx < 0) {
+                d->brush.hx = 0;
+            }
+            if (d->brush.hx >= d->brush.w) {
+                d->brush.hx = d->brush.w - 1;
+            }
+            if (d->brush.hy < 0) {
+                d->brush.hy = 0;
+            }
+            if (d->brush.hy >= d->brush.h) {
+                d->brush.hy = d->brush.h - 1;
+            }
+            doc_status(d, "Place");
+        }
+        return;
+    }
     if (u->mag_arm && button == 1) {
         zoom_place(u, d, px, py);
         u->magnify = 1;
@@ -5058,6 +5197,7 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
         u->text_on = 0;
         u->magnify = 0;
         u->mag_arm = 0;
+        u->place_handle = 0;
         u->gesture = GS_NONE;
         u->stroking = 0;
         d->play = 0;
@@ -5096,15 +5236,45 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
         }
         return;
     }
-    if ((key & 0xF00) == 0xA00 && (key & 255) == 'a') {
-        u->panel = !u->panel;
-        doc_status(d, u->panel ? "Panel On" : "Panel Off");
-        return;
-    }
-    if ((key & 0xF00) == 0xA00 && (key & 255) == '1') {
-        u->lt_dim = !u->lt_dim;
-        doc_status(d, u->lt_dim ? "Dim" : "Dim off");
-        return;
+    if ((key & 0xF00) == 0xA00) {
+        int ak = key & 255;
+        if (ak >= 'A' && ak <= 'Z') {
+            ak = ak - 'A' + 'a';
+        }
+        if (ak == 'a') {
+            u->panel = !u->panel;
+            doc_status(d, u->panel ? "Panel On" : "Panel Off");
+            return;
+        }
+        if (ak == '1') {
+            u->lt_dim = !u->lt_dim;
+            doc_status(d, u->lt_dim ? "Dim" : "Dim off");
+            return;
+        }
+        if (ak == 'n') {
+            do_act(u, d, a, A_BR_TO, 0);
+            return;
+        }
+        if (ak == 'b') {
+            do_act(u, d, a, A_BR_SWAP, 0);
+            return;
+        }
+        if (ak == 'm') {
+            do_act(u, d, a, A_METAMORPH, 0);
+            return;
+        }
+        if (ak == 's') {
+            do_act(u, d, a, A_HANDLE_C, 0);
+            return;
+        }
+        if (ak == 'x' || ak == 'y') {
+            do_act(u, d, a, A_HANDLE_K, 0);
+            return;
+        }
+        if (ak == 'z') {
+            do_act(u, d, a, A_HANDLE_P, 0);
+            return;
+        }
     }
     if (ch == '3') {
         begin_prompt(u, d, A_GOTO, "number:");
@@ -5234,6 +5404,61 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
     if (ch == 'b') {
         d->tool = TOOL_BRUSH;
         doc_status(d, "Brush");
+        return;
+    }
+    if (ch == 'B') {
+        do_act(u, d, a, A_RESTORE, 0);
+        return;
+    }
+    if (ch == 'z') {
+        do_act(u, d, a, A_ROT90, 0);
+        return;
+    }
+    if (ch == 'Z') {
+        do_act(u, d, a, A_STRETCH, 0);
+        return;
+    }
+    if (ch == 'h') {
+        do_act(u, d, a, A_HALVE, 0);
+        return;
+    }
+    if (ch == 'H') {
+        do_act(u, d, a, A_DOUBLE, 0);
+        return;
+    }
+    if (ch == 'x') {
+        do_act(u, d, a, A_BFLIP_H, 0);
+        return;
+    }
+    if (ch == 'y') {
+        do_act(u, d, a, A_BFLIP_V, 0);
+        return;
+    }
+    if (ch == 'X') {
+        do_act(u, d, a, A_DUBH, 0);
+        return;
+    }
+    if (ch == 'Y') {
+        do_act(u, d, a, A_DUBV, 0);
+        return;
+    }
+    if (ch == 'o') {
+        do_act(u, d, a, A_OUTLINE, 0);
+        return;
+    }
+    if (ch == 'O') {
+        do_act(u, d, a, A_TRIM, 0);
+        return;
+    }
+    if (ch == '_') {
+        if (d->brush.pix != NULL) {
+            brush_scale(&d->brush,
+                        d->brush.w > 2 ? d->brush.w - 2 : 1,
+                        d->brush.h > 2 ? d->brush.h - 2 : 1);
+            doc_status(d, "Brush smaller");
+        } else if (d->brush_d > 1) {
+            d->brush_d--;
+        }
         return;
     }
     if (ch == '+' || ch == '=') {
