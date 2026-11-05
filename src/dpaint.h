@@ -56,6 +56,14 @@ enum {
 };
 
 typedef struct {
+    int dx, dy, dz;
+    int rx, ry, rz;
+    int count;
+    int ease_in, ease_out;
+    int trails, cyclic, dir;
+} DpMove;
+
+typedef struct {
     uint8_t r, g, b;
 } DpColor;
 
@@ -148,6 +156,7 @@ typedef struct {
     int translucency_pct;
     int process_on;
     int process_mode;
+    DpMove move;
     struct DpUndo {
         int frame;
         int w, h;
@@ -244,6 +253,7 @@ typedef struct {
     int range_pick_hi;
     DpRange range_saved[DP_MAX_RANGES];
     int nranges_saved;
+    int move_open;
     int prsp_open;
     int bend_horiz;
     int place_handle;
@@ -371,6 +381,7 @@ void doc_prsp_set(Doc *d, int rx, int ry, int rz, int px, int py, int pz);
 void doc_prsp_reset(Doc *d);
 void doc_prsp_center(Doc *d);
 void doc_prsp_render(Doc *d, int fill_screen);
+void doc_apply_move(Doc *d, const DpMove *mv, int trails_only);
 
 int iff_write_png(const char *path, const uint8_t *pix, int w, int h,
                   const DpColor *pal, int ncolors);
@@ -394,6 +405,8 @@ int iff_load_anim(const char *path, DpFrame *frames, int maxframes, int *nframes
 
 int iff_save_prsp(const char *path, const uint8_t dpps[DP_DPPS_LEN]);
 int iff_load_prsp(const char *path, uint8_t dpps[DP_DPPS_LEN], char *err, int errlen);
+int iff_save_move(const char *path, const DpMove *mv);
+int iff_load_move(const char *path, DpMove *mv, char *err, int errlen);
 int iff_save_stencil(const char *path, const uint8_t *mask, int w, int h);
 int iff_load_stencil(const char *path, uint8_t **mask, int *w, int *h,
                      char *err, int errlen);

@@ -449,11 +449,11 @@ int main(void)
             {
                 int mx, my, mw, mh;
                 expect(ui_menu_box(&ui, face, &mx, &my, &mw, &mh) == 0, "anim column");
-                expect(mh == 60 && mw > 40 && mw < 220, "one column");
+                expect(mh == 70 && mw > 40 && mw < 220, "one column");
                 expect(ui_menu_subbox(&ui, face, &mx, &my, &mw, &mh) != 0, "submenu closed");
                 expect(rgb[((my + 4) * 800 + 8) * 3] < 40, "page not a white slab");
             }
-            ui.menu_item = 4;
+            ui.menu_item = 5;
             ui_render(&ui, &doc, &assets, rgb, 800, 360);
             {
                 int mx, my, mw, mh, sx, sy, sw, sh;
@@ -1827,6 +1827,26 @@ int main(void)
                 }
             }
             expect(ink > 0, "perspective Do paints projected brush");
+        }
+        {
+            char mpath[256], herr[120];
+            DpMove mv_out, mv_in;
+            snprintf(mpath, sizeof(mpath), "%s/step.move", dir);
+            memset(&mv_out, 0, sizeof(mv_out));
+            mv_out.dx = 16;
+            mv_out.dy = 8;
+            mv_out.rz = 45;
+            mv_out.count = 4;
+            mv_out.ease_in = 1;
+            mv_out.ease_out = 1;
+            mv_out.trails = 1;
+            mv_out.dir = 1;
+            expect(iff_save_move(mpath, &mv_out) == 0, "save move template");
+            memset(&mv_in, 0, sizeof(mv_in));
+            expect(iff_load_move(mpath, &mv_in, herr, 120) == 0, "load move template");
+            expect(mv_in.dx == 16 && mv_in.dy == 8 && mv_in.rz == 45 &&
+                   mv_in.count == 4 && mv_in.ease_in == 1 && mv_in.trails == 1,
+                   "move template fields round-trip");
         }
     }
     printf("smoke %s (%d fails) ppm %s\n", fails ? "FAILED" : "ok", fails, ppm);

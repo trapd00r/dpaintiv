@@ -1532,6 +1532,112 @@ int iff_load_prsp(const char *path, uint8_t dpps[DP_DPPS_LEN], char *err, int er
     return 0;
 }
 
+int iff_save_move(const char *path, const DpMove *mv)
+{
+    Buf b;
+    uint8_t raw[24];
+    uint8_t *file = NULL;
+    int flen = 0, rc;
+    if (mv == NULL) {
+        return -1;
+    }
+    memset(&b, 0, sizeof(b));
+    w16(raw + 0, (uint16_t)(int16_t)mv->dx);
+    w16(raw + 2, (uint16_t)(int16_t)mv->dy);
+    w16(raw + 4, (uint16_t)(int16_t)mv->dz);
+    w16(raw + 6, (uint16_t)(int16_t)mv->rx);
+    w16(raw + 8, (uint16_t)(int16_t)mv->ry);
+    w16(raw + 10, (uint16_t)(int16_t)mv->rz);
+    w16(raw + 12, (uint16_t)(int16_t)(mv->count > 0 ? mv->count : 1));
+    w16(raw + 14, (uint16_t)(int16_t)mv->ease_in);
+    w16(raw + 16, (uint16_t)(int16_t)mv->ease_out);
+    w16(raw + 18, (uint16_t)(int16_t)mv->trails);
+    w16(raw + 20, (uint16_t)(int16_t)mv->cyclic);
+    w16(raw + 22, (uint16_t)(int16_t)mv->dir);
+    if (buf_chunk(&b, "MOVE", raw, 24) != 0) {
+        return -1;
+    }
+    rc = form_wrap("PRSP", &b, &file, &flen);
+    free(b.p);
+    if (rc != 0) {
+        return -1;
+    }
+    rc = write_file(path, file, flen);
+    free(file);
+    return rc;
+}
+
+int iff_load_move(const char *path, DpMove *mv, char *err, int errlen)
+{
+    FILE *fp = fopen(path, "rb");
+    long sz;
+    uint8_t *file;
+    Rd r;
+    int end, found = 0;
+    if (fp == NULL) {
+        set_err(err, errlen, "No such file found.");
+        return -1;
+    }
+    fseek(fp, 0, SEEK_END);
+    sz = ftell(fp);
+    rewind(fp);
+    if (sz < 12 || sz > 1024 * 1024) {
+        fclose(fp);
+        set_err(err, errlen, "Not a valid MOVE template");
+        return -1;
+    }
+    file = (uint8_t *)malloc((size_t)sz);
+    if (file == NULL || fread(file, 1, (size_t)sz, fp) != (size_t)sz) {
+        free(file);
+        fclose(fp);
+        return -1;
+    }
+    fclose(fp);
+    if (memcmp(file, "FORM", 4) != 0 || memcmp(file + 8, "PRSP", 4) != 0) {
+        free(file);
+        set_err(err, errlen, "Not a valid MOVE template");
+        return -1;
+    }
+    end = 8 + (int)r32(file + 4);
+    if (end > (int)sz) {
+        end = (int)sz;
+    }
+    r.p = file;
+    r.n = (int)sz;
+    r.i = 12;
+    memset(mv, 0, sizeof(*mv));
+    while (r.i + 8 <= end) {
+        char id[4];
+        const uint8_t *data;
+        int len, rc;
+        rc = rd_chunk(&r, id, &data, &len, end);
+        if (rc <= 0) {
+            break;
+        }
+        if (memcmp(id, "MOVE", 4) == 0 && len >= 24) {
+            mv->dx = (int16_t)r16(data + 0);
+            mv->dy = (int16_t)r16(data + 2);
+            mv->dz = (int16_t)r16(data + 4);
+            mv->rx = (int16_t)r16(data + 6);
+            mv->ry = (int16_t)r16(data + 8);
+            mv->rz = (int16_t)r16(data + 10);
+            mv->count = (int16_t)r16(data + 12);
+            mv->ease_in = (int16_t)r16(data + 14);
+            mv->ease_out = (int16_t)r16(data + 16);
+            mv->trails = (int16_t)r16(data + 18);
+            mv->cyclic = (int16_t)r16(data + 20);
+            mv->dir = (int16_t)r16(data + 22);
+            found = 1;
+        }
+    }
+    free(file);
+    if (!found) {
+        set_err(err, errlen, "Not a valid MOVE template");
+        return -1;
+    }
+    return 0;
+}
+
 int iff_load_stencil(const char *path, uint8_t **mask, int *w, int *h,
                      char *err, int errlen)
 {

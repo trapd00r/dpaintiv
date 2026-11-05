@@ -57,9 +57,10 @@ enum {
     A_BEND_H, A_BEND_V,
     A_HANDLE_C, A_HANDLE_K, A_HANDLE_P,
     A_MODE,
-    A_LOAD_ANIM, A_SAVE_ANIM, A_ADD, A_COPYF, A_DELF, A_SETN, A_RATE, A_RANGE,
+    A_LOAD_ANIM, A_SAVE_ANIM, A_MOVE, A_LOAD_MOVE, A_SAVE_MOVE,
+    A_ADD, A_COPYF, A_DELF, A_SETN, A_RATE, A_RANGE,
     A_PREV, A_NEXT, A_GOTO, A_PLAY, A_ONCE, A_PING, A_COMP, A_EXP,
-    A_AB_LOAD, A_AB_SAVE, A_AB_PICK, A_AB_FREE, A_AB_CELS,
+    A_AB_LOAD, A_AB_SAVE, A_AB_PICK, A_AB_SETTINGS, A_AB_USE, A_AB_FREE, A_AB_CELS,
     A_ST_MAKE, A_ST_REMAKE, A_ST_PAINT, A_ST_SHOW, A_ST_REV, A_ST_ON, A_ST_FREE,
     A_ST_LOAD, A_ST_SAVE,
     A_LT_ON, A_LT_MERGE, A_LT_DIM, A_LT_TWO, A_LT_PREV, A_LT_NEXT, A_LT_SPARE,
@@ -181,6 +182,8 @@ static const Item ab_items[] = {
     {"Load..", A_AB_LOAD, 0, NULL, 0},
     {"Save..", A_AB_SAVE, 0, NULL, 0},
     {"Pick up..", A_AB_PICK, 0, NULL, 0},
+    {"Settings..", A_AB_SETTINGS, 0, NULL, 0},
+    {"Use", A_AB_USE, 0, NULL, 0},
     {"Free", A_AB_FREE, 0, NULL, 0}
 };
 static const Item anim_frames[] = {
@@ -206,9 +209,10 @@ static const Item anim_method[] = {
     {"Compressed", A_COMP, 0, NULL, 0}
 };
 static const Item anim_items[] = {
-    {"AnimBrush", 0, 0, ab_items, 4},
+    {"AnimBrush", 0, 0, ab_items, 6},
     {"Load..", A_LOAD_ANIM, 0, NULL, 0},
     {"Save..", A_SAVE_ANIM, 0, NULL, 0},
+    {"Move..", A_MOVE, 0, NULL, 0, "(M)"},
     {"Frames", 0, 0, anim_frames, 4},
     {"Control", 0, 0, anim_ctrl, 10},
     {"Method", 0, 0, anim_method, 2}
@@ -357,7 +361,7 @@ static const MenuBar bars[] = {
     {"Picture", picture_items, 11},
     {"Brush", brush_items, 10},
     {"Mode", mode_items, 10},
-    {"Anim", anim_items, 6},
+    {"Anim", anim_items, 7},
     {"Color", color_items, 9},
     {"Effect", effect_items, 7},
     {"Font", font_items, 1},
@@ -979,6 +983,10 @@ static const char *req_title(int act)
         return "Load Palette";
     case A_SAVE_PAL:
         return "Save Palette";
+    case A_LOAD_MOVE:
+        return "Load Move";
+    case A_SAVE_MOVE:
+        return "Save Move";
     case A_PRSP_LOAD:
     case 8001:
         return "Load Perspective";
@@ -1002,6 +1010,8 @@ static const char *req_title(int act)
         return "Metamorph";
     case A_TRANS_SET:
         return "Translucency";
+    case A_AB_SETTINGS:
+        return "AnimBrush Settings";
     case A_ADD:
         return "Add Frames";
     case A_COPYF:
@@ -1039,6 +1049,8 @@ static int file_act(int act)
     case A_ST_SAVE:
     case A_LOAD_PAL:
     case A_SAVE_PAL:
+    case A_LOAD_MOVE:
+    case A_SAVE_MOVE:
     case A_PRSP_LOAD:
     case A_PRSP_SAVE:
     case 8001:
@@ -1680,6 +1692,8 @@ static void draw_arrange(const Ui *u, const Doc *d, const DpAssets *a,
                          uint8_t *rgb, int w, int h);
 static void draw_ranges(const Ui *u, const Doc *d, const DpAssets *a,
                         uint8_t *rgb, int w, int h);
+static void draw_move(const Ui *u, const Doc *d, const DpAssets *a,
+                      uint8_t *rgb, int w, int h);
 static void draw_prsp(const Ui *u, const Doc *d, const DpAssets *a,
                       uint8_t *rgb, int w, int h);
 static void draw_wheel_swatch(const Ui *u, const Doc *d, uint8_t *rgb, int w, int h);
@@ -2157,7 +2171,7 @@ void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
         dp_font_rgb(f, rgb, w, h, (cx + 4) * s, (cy + 2) * s, "Cancel", 255, 255, 255, s);
     }
     if (u->pointer_seen && u->over_page && !u->prompt && u->menu_open < 0 &&
-        !u->about && !u->printer && !u->range_open && !u->prsp_open) {
+        !u->about && !u->printer && !u->range_open && !u->move_open && !u->prsp_open) {
         int k;
         int cx = u->pointer_x;
         int cy = u->pointer_y;
@@ -2172,6 +2186,7 @@ void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
     draw_hover(u, d, a, rgb, w, h);
     draw_enh(u, a, rgb, w, h);
     draw_ranges(u, d, a, rgb, w, h);
+    draw_move(u, d, a, rgb, w, h);
     draw_prsp(u, d, a, rgb, w, h);
     draw_arrange(u, d, a, rgb, w, h);
     draw_wheel_swatch(u, d, rgb, w, h);
@@ -2739,6 +2754,13 @@ static void finish_prompt(Ui *u, Doc *d)
         d->translucency_on = 1;
         doc_status(d, "Translucency");
         break;
+    case A_AB_SETTINGS:
+        n = atoi(path);
+        if (n >= 1 && d->nabrush > 0) {
+            d->abrush_i = (n - 1) % d->nabrush;
+        }
+        doc_status(d, "AnimBrush Settings");
+        break;
     case A_LOAD_PAL: {
         DpFrame fr;
         DpColor pal[DP_MAX_COLORS];
@@ -2765,6 +2787,25 @@ static void finish_prompt(Ui *u, Doc *d)
             doc_status(d, "Save");
         } else {
             doc_status(d, "Can't Save");
+        }
+        break;
+    case A_LOAD_MOVE: {
+        DpMove mv;
+        char err[80];
+        err[0] = 0;
+        if (iff_load_move(path, &mv, err, (int)sizeof(err)) != 0) {
+            doc_status(d, err[0] ? err : "Not a valid MOVE template");
+        } else {
+            d->move = mv;
+            doc_status(d, "Load");
+        }
+        break;
+    }
+    case A_SAVE_MOVE:
+        if (iff_save_move(path, &d->move) != 0) {
+            doc_status(d, "Can't Save");
+        } else {
+            doc_status(d, "Save");
         }
         break;
     case A_PRSP_LOAD:
@@ -2919,7 +2960,8 @@ static void finish_prompt(Ui *u, Doc *d)
     if ((act == A_LOAD_PIC || act == A_SAVE_PIC || act == A_LOAD_BR ||
          act == A_SAVE_BR || act == A_LOAD_ANIM || act == A_SAVE_ANIM ||
          act == A_AB_LOAD || act == A_AB_SAVE || act == A_LOAD_PAL ||
-         act == A_SAVE_PAL || act == A_PRSP_LOAD || act == A_PRSP_SAVE) &&
+         act == A_SAVE_PAL || act == A_LOAD_MOVE || act == A_SAVE_MOVE ||
+         act == A_PRSP_LOAD || act == A_PRSP_SAVE) &&
         (strcmp(d->status, "Load") == 0 || strcmp(d->status, "Save") == 0)) {
         char kept[512];
         char *slash;
@@ -3217,6 +3259,10 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
     case A_SAVE_ANIM:
         begin_prompt(u, d, act, "Save");
         break;
+    case A_MOVE:
+        u->move_open = 1;
+        doc_status(d, "Move");
+        break;
     case A_ADD:
         begin_prompt(u, d, act, "# of Frames:");
         break;
@@ -3284,6 +3330,19 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
             ask_cels(u, d);
         } else {
             pick_animbrush(d, 1);
+        }
+        break;
+    case A_AB_SETTINGS:
+        begin_prompt(u, d, A_AB_SETTINGS, "Current:");
+        snprintf(u->text, sizeof(u->text), "%d", d->abrush_i + 1);
+        u->text_len = (int)strlen(u->text);
+        break;
+    case A_AB_USE:
+        if (d->nabrush > 0) {
+            d->tool = TOOL_BRUSH;
+            doc_status(d, "AnimBrush");
+        } else {
+            doc_status(d, "Must have an AnimBrush");
         }
         break;
     case A_AB_FREE:
@@ -4229,7 +4288,7 @@ static int hover_id_at(const Ui *u, const Doc *d, int lx, int ly)
     int bsize, tool, undo, clearb, special, idx;
     int bar_y, bar_w, arr_l, arr_r, sl_x, sl_w, btn_x, i;
     if (u->prompt || u->about || u->printer || u->menu_open >= 0 || u->enh_open ||
-        u->arrange || u->range_open || u->prsp_open) {
+        u->arrange || u->range_open || u->move_open || u->prsp_open) {
         return 0;
     }
     bsize = brush_size_at(u, lx, ly);
@@ -4679,7 +4738,7 @@ static void place_pointer(Ui *u, Doc *d, int mx, int my)
     u->over_page = over && px >= 0 && py >= 0 && px < page_w(d) && py < page_h(d);
     u->cursor_cross = (u->over_page && !u->prompt && u->menu_open < 0 &&
                        !u->about && !u->printer && !u->enh_open && !u->arrange &&
-                       !u->range_open && !u->prsp_open) ? 1 : 0;
+                       !u->range_open && !u->move_open && !u->prsp_open) ? 1 : 0;
     if (u->over_page) {
         u->mpx = px;
         u->mpy = py;
@@ -5491,6 +5550,128 @@ static int ranges_click(Ui *u, Doc *d, int lx, int ly)
     return 1;
 }
 
+static void draw_move(const Ui *u, const Doc *d, const DpAssets *a,
+                      uint8_t *rgb, int w, int h)
+{
+    const DpFont *f = font(a, u);
+    int s = sc(u);
+    int bx, by, bw = 248, bh = 128;
+    char buf[64];
+    if (!u->move_open || f == NULL) {
+        return;
+    }
+    box_dlg(u, bw, bh, &bx, &by);
+    fill_rect(rgb, w, h, bx * s, by * s, bw * s, bh * s, 204, 204, 204);
+    fill_rect(rgb, w, h, bx * s, by * s, bw * s, 12 * s, 20, 70, 180);
+    dp_font_rgb(f, rgb, w, h, (bx + 6) * s, (by + 2) * s, "Move", 255, 255, 255, s);
+    snprintf(buf, sizeof(buf), "Dist X:%d Y:%d Z:%d", d->move.dx, d->move.dy, d->move.dz);
+    dp_font_rgb(f, rgb, w, h, (bx + 8) * s, (by + 18) * s, buf, 0, 0, 0, s);
+    draw_btn(f, rgb, w, h, s, bx + 148, by + 16, 28, 12, "X+", 0);
+    draw_btn(f, rgb, w, h, s, bx + 180, by + 16, 28, 12, "Y+", 0);
+    draw_btn(f, rgb, w, h, s, bx + 212, by + 16, 28, 12, "Z+", 0);
+    snprintf(buf, sizeof(buf), "Angle X:%d Y:%d Z:%d", d->move.rx, d->move.ry, d->move.rz);
+    dp_font_rgb(f, rgb, w, h, (bx + 8) * s, (by + 34) * s, buf, 0, 0, 0, s);
+    draw_btn(f, rgb, w, h, s, bx + 148, by + 32, 28, 12, "RX", 0);
+    draw_btn(f, rgb, w, h, s, bx + 180, by + 32, 28, 12, "RY", 0);
+    draw_btn(f, rgb, w, h, s, bx + 212, by + 32, 28, 12, "RZ", 0);
+    snprintf(buf, sizeof(buf), "Count: %d", d->move.count);
+    dp_font_rgb(f, rgb, w, h, (bx + 8) * s, (by + 50) * s, buf, 0, 0, 0, s);
+    draw_btn(f, rgb, w, h, s, bx + 78, by + 48, 16, 12, "-", 0);
+    draw_btn(f, rgb, w, h, s, bx + 98, by + 48, 16, 12, "+", 0);
+    draw_btn(f, rgb, w, h, s, bx + 120, by + 48, 56, 12, "Ease-In", d->move.ease_in);
+    draw_btn(f, rgb, w, h, s, bx + 180, by + 48, 60, 12, "Ease-Out", d->move.ease_out);
+    draw_btn(f, rgb, w, h, s, bx + 8, by + 66, 48, 12, "Trails", d->move.trails);
+    draw_btn(f, rgb, w, h, s, bx + 60, by + 66, 48, 12, "Cyclic", d->move.cyclic);
+    draw_btn(f, rgb, w, h, s, bx + 112, by + 66, 40, 12, "Clear", 0);
+    draw_btn(f, rgb, w, h, s, bx + 156, by + 66, 40, 12, "Load", 0);
+    draw_btn(f, rgb, w, h, s, bx + 200, by + 66, 40, 12, "Save", 0);
+    draw_btn(f, rgb, w, h, s, bx + 8, by + bh - 18, 48, 12, "Draw", 1);
+    draw_btn(f, rgb, w, h, s, bx + 64, by + bh - 18, 56, 12, "Preview", 0);
+    draw_btn(f, rgb, w, h, s, bx + bw - 56, by + bh - 18, 48, 12, "Exit", 0);
+}
+
+static int move_click(Ui *u, Doc *d, int lx, int ly)
+{
+    int bx, by, bw = 248, bh = 128;
+    int delta = u->mod_alt ? -8 : 8;
+    box_dlg(u, bw, bh, &bx, &by);
+    if (ly >= by + 16 && ly < by + 28) {
+        if (lx >= bx + 148 && lx < bx + 176) {
+            d->move.dx += delta;
+        } else if (lx >= bx + 180 && lx < bx + 208) {
+            d->move.dy += delta;
+        } else if (lx >= bx + 212 && lx < bx + 240) {
+            d->move.dz += delta;
+        }
+        return 1;
+    }
+    if (ly >= by + 32 && ly < by + 44) {
+        int ad = u->mod_alt ? -15 : 15;
+        if (lx >= bx + 148 && lx < bx + 176) {
+            d->move.rx = (d->move.rx + ad) % 360;
+        } else if (lx >= bx + 180 && lx < bx + 208) {
+            d->move.ry = (d->move.ry + ad) % 360;
+        } else if (lx >= bx + 212 && lx < bx + 240) {
+            d->move.rz = (d->move.rz + ad) % 360;
+        }
+        return 1;
+    }
+    if (ly >= by + 48 && ly < by + 60) {
+        if (lx >= bx + 78 && lx < bx + 94 && d->move.count > 1) {
+            d->move.count--;
+        } else if (lx >= bx + 98 && lx < bx + 114 && d->move.count < 64) {
+            d->move.count++;
+        } else if (lx >= bx + 120 && lx < bx + 176) {
+            d->move.ease_in = !d->move.ease_in;
+        } else if (lx >= bx + 180 && lx < bx + 240) {
+            d->move.ease_out = !d->move.ease_out;
+        }
+        return 1;
+    }
+    if (ly >= by + 66 && ly < by + 78) {
+        if (lx >= bx + 8 && lx < bx + 56) {
+            d->move.trails = !d->move.trails;
+        } else if (lx >= bx + 60 && lx < bx + 108) {
+            d->move.cyclic = !d->move.cyclic;
+        } else if (lx >= bx + 112 && lx < bx + 152) {
+            memset(&d->move, 0, sizeof(d->move));
+            d->move.count = 10;
+            d->move.dir = 1;
+        } else if (lx >= bx + 156 && lx < bx + 196) {
+            u->move_open = 0;
+            begin_prompt(u, d, A_LOAD_MOVE, "Load");
+        } else if (lx >= bx + 200 && lx < bx + 240) {
+            u->move_open = 0;
+            begin_prompt(u, d, A_SAVE_MOVE, "Save");
+        }
+        return 1;
+    }
+    if (ly >= by + bh - 18 && ly < by + bh - 6) {
+        if (lx >= bx + 8 && lx < bx + 56) {
+            u->move_open = 0;
+            if (need_brush(d) == 0) {
+                doc_checkpoint(d);
+                doc_apply_move(d, &d->move, 0);
+                doc_status(d, "Move");
+            }
+            return 1;
+        }
+        if (lx >= bx + 64 && lx < bx + 120) {
+            if (need_brush(d) == 0) {
+                doc_checkpoint(d);
+                doc_apply_move(d, &d->move, 1);
+                doc_status(d, "Preview");
+            }
+            return 1;
+        }
+        if (lx >= bx + bw - 56 && lx < bx + bw - 8) {
+            u->move_open = 0;
+            return 1;
+        }
+    }
+    return 1;
+}
+
 static void draw_prsp(const Ui *u, const Doc *d, const DpAssets *a,
                       uint8_t *rgb, int w, int h)
 {
@@ -5634,6 +5815,13 @@ void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down)
     if (u->range_open) {
         if (down && button == 1) {
             ranges_click(u, d, lx, ly);
+        }
+        return;
+    }
+
+    if (u->move_open) {
+        if (down && button == 1) {
+            move_click(u, d, lx, ly);
         }
         return;
     }
@@ -6087,7 +6275,7 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
     if (u->enh_open && key != KEY_ESC) {
         return;
     }
-    if ((u->range_open || u->prsp_open) && key != KEY_ESC) {
+    if ((u->range_open || u->move_open || u->prsp_open) && key != KEY_ESC) {
         return;
     }
     if (key == KEY_ESC) {
@@ -6104,6 +6292,10 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
             d->nranges = u->nranges_saved;
             u->range_open = 0;
             doc_status(d, "CANCEL");
+            return;
+        }
+        if (u->move_open) {
+            u->move_open = 0;
             return;
         }
         if (u->prsp_open) {
@@ -6406,6 +6598,10 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
     }
     if (ch == '`') {
         do_act(u, d, a, A_ST_ON, 0);
+        return;
+    }
+    if (ch == 'M') {
+        do_act(u, d, a, A_MOVE, 0);
         return;
     }
     if (ch == '|') {

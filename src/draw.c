@@ -251,6 +251,9 @@ int doc_init(Doc *d, int w, int h, int ncolors, const DpColor *pal)
     memcpy(d->pal_saved, d->pal, sizeof(d->pal));
     set_default_range(d);
     d->translucency_pct = 50;
+    d->move.count = 10;
+    d->move.dx = 24;
+    d->move.dir = 1;
     d->dpps[0] = 0;
     d->dpps[1] = 1;
     if (frame_alloc(&d->frames[0], w, h, 0) != 0) {
@@ -2245,5 +2248,65 @@ void doc_prsp_render(Doc *d, int fill_screen)
     }
     if (free_src) {
         free(src);
+    }
+}
+
+void doc_apply_move(Doc *d, const DpMove *mv, int trails_only)
+{
+    int i, count, start_frame, base_x, base_y;
+    int saved_rx, saved_ry, saved_rz, saved_px, saved_py, saved_pz;
+    if (d == NULL || mv == NULL || d->brush.pix == NULL) {
+        return;
+    }
+    count = mv->count > 0 ? mv->count : 1;
+    if (count > 64) {
+        count = 64;
+    }
+    start_frame = d->cur;
+    base_x = d->pick_ok ? (d->pick_x + d->brush.hx) : (fw(d) / 2);
+    base_y = d->pick_ok ? (d->pick_y + d->brush.hy) : (fh(d) / 2);
+    doc_prsp_get(d, &saved_rx, &saved_ry, &saved_rz, &saved_px, &saved_py, &saved_pz);
+    for (i = 0; i < count; i++) {
+        int den = mv->cyclic ? count : (count > 1 ? count - 1 : 1);
+        double t = den > 0 ? (double)i / (double)den : 1.0;
+        int ox, oy, oz, arx, ary, arz;
+        if (mv->ease_in && mv->ease_out) {
+            t = t * t * (3.0 - 2.0 * t);
+        } else if (mv->ease_in) {
+            t = t * t;
+        } else if (mv->ease_out) {
+            t = 1.0 - (1.0 - t) * (1.0 - t);
+        }
+        if (mv->dir < 0) {
+            t = 1.0 - t;
+        }
+        ox = (int)floor((double)mv->dx * t + 0.5);
+        oy = (int)floor((double)mv->dy * t + 0.5);
+        oz = (int)floor((double)mv->dz * t + 0.5);
+        arx = (int)floor((double)mv->rx * t + 0.5);
+        ary = (int)floor((double)mv->ry * t + 0.5);
+        arz = (int)floor((double)mv->rz * t + 0.5);
+        if (!trails_only && !mv->trails && d->nframes > 1) {
+            d->cur = (start_frame + i) % d->nframes;
+        }
+        if (arx != 0 || ary != 0 || oz != 0) {
+            doc_prsp_set(d, arx, ary, arz, base_x + ox, base_y + oy,
+                         200 + oz > 20 ? 200 + oz : 20);
+            doc_prsp_render(d, 0);
+        } else {
+            DpBrush tmp;
+            memset(&tmp, 0, sizeof(tmp));
+            if (brush_clone(&tmp, &d->brush) == 0) {
+                if (arz != 0) {
+                    brush_rotate_angle(&tmp, arz);
+                }
+                doc_stamp_brush(d, &tmp, base_x + ox, base_y + oy, 0);
+                brush_free(&tmp);
+            }
+        }
+    }
+    doc_prsp_set(d, saved_rx, saved_ry, saved_rz, saved_px, saved_py, saved_pz);
+    if (!trails_only && !mv->trails && d->nframes > 1) {
+        d->cur = start_frame;
     }
 }
