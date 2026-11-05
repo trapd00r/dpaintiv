@@ -38,7 +38,6 @@
 
 enum {
     CELL_TOOL = 1,
-    CELL_NA = 2,
     CELL_MAG = 3,
     CELL_GRID = 4,
     CELL_SYM = 5,
@@ -46,10 +45,10 @@ enum {
 };
 
 enum {
-    A_NONE = 0,
-    A_LOAD_PIC, A_SAVE_PIC, A_DELETE, A_PRINT,
+    A_LOAD_PIC = 1, A_SAVE_PIC, A_DELETE, A_PRINT,
     A_FLIP_H, A_FLIP_V, A_SWAP, A_COPY_SPARE, A_MERGE_F, A_MERGE_B, A_DEL_PAGE,
-    A_PAGE, A_SHOW, A_FMT_LO, A_FMT_MED, A_FMT_LACE, A_FMT_HI, A_ABOUT, A_QUIT,
+    A_PAGE, A_SHOW, A_FMT_LO, A_FMT_MED, A_FMT_LACE, A_FMT_HI, A_FMT_HAM,
+    A_ABOUT, A_QUIT,
     A_LOAD_BR, A_SAVE_BR, A_RESTORE, A_BR_TO, A_BR_SWAP, A_METAMORPH,
     A_STRETCH, A_HALVE, A_DOUBLE, A_DUBH, A_DUBV,
     A_BFLIP_H, A_BFLIP_V, A_OUTLINE, A_TRIM,
@@ -102,7 +101,8 @@ static const Item pic_fmt[] = {
     {"Lo-Res     320x200", A_FMT_LO, 0, NULL, 0},
     {"Med-Res    640x200", A_FMT_MED, 0, NULL, 0},
     {"Interlace  320x400", A_FMT_LACE, 0, NULL, 0},
-    {"Hi-Res     640x400", A_FMT_HI, 0, NULL, 0}
+    {"Hi-Res     640x400", A_FMT_HI, 0, NULL, 0},
+    {"HAM        320x200", A_FMT_HAM, 0, NULL, 0}
 };
 static const Item picture_items[] = {
     {"Load..", A_LOAD_PIC, 0, NULL, 0},
@@ -113,7 +113,7 @@ static const Item picture_items[] = {
     {"Spare", 0, 0, pic_spare, 5},
     {"Page Size..", A_PAGE, 0, NULL, 0},
     {"Show Page", A_SHOW, 0, NULL, 0},
-    {"Screen Format..", 0, 0, pic_fmt, 4},
+    {"Screen Format..", 0, 0, pic_fmt, 5},
     {"About..", A_ABOUT, 0, NULL, 0},
     {"Quit", A_QUIT, 0, NULL, 0}
 };
@@ -307,7 +307,7 @@ static const Item color_items[] = {
 };
 
 static const Item pref_items[] = {
-    {"Coords", A_PREF, PREF_COORDS, NULL, 0},
+    {"Coords", A_PREF, PREF_COORDS, NULL, 0, "(|)"},
     {"Fast FB", A_PREF, PREF_FASTFB, NULL, 0},
     {"MultiCycle", A_PREF, PREF_MULTICYCLE, NULL, 0},
     {"Be Square", A_PREF, PREF_SQUARE, NULL, 0},
@@ -1029,8 +1029,6 @@ static const char *req_title(int act)
         return "Go To Frame";
     case A_RANGE:
         return "Play Range";
-    case -1:
-        return "Not in this build";
     default:
         return "Requester";
     }
@@ -2159,14 +2157,11 @@ void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
                       255, 255, 255);
             snprintf(line, sizeof(line), "%.40s", u->text);
             dp_font_rgb(f, rgb, w, h, (rx + 10) * s, (oky - 14) * s, line, 0, 0, 0, s);
-        } else if (u->prompt > 0) {
+        } else {
             fill_rect(rgb, w, h, (rx + 8) * s, (ry + 16) * s, (rw - 16) * s, 12 * s,
                       255, 255, 255);
             snprintf(line, sizeof(line), "%.80s", u->text);
             dp_font_rgb(f, rgb, w, h, (rx + 10) * s, (ry + 18) * s, line, 0, 0, 0, s);
-        } else {
-            dp_font_rgb(f, rgb, w, h, (rx + 8) * s, (ry + 18) * s,
-                        "Cancel to return to the page.", 0, 0, 0, s);
         }
         fill_rect(rgb, w, h, okx * s, oky * s, bw * s, bh * s, 20, 70, 180);
         fill_rect(rgb, w, h, cx * s, cy * s, bw * s, bh * s, 20, 70, 180);
@@ -2937,11 +2932,7 @@ static void finish_prompt(Ui *u, Doc *d)
             doc_status(d, "Save");
         }
         break;
-    case A_NONE:
     default:
-        if (act == 9001) {
-            break;
-        }
         break;
     }
     if (act == 8001 || act == 8002) {
@@ -3039,9 +3030,6 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
     int i, n;
     u->menu_open = -1;
     switch (act) {
-    case A_NONE:
-        begin_prompt(u, d, -1, "Not in this build");
-        break;
     case A_LOAD_PIC:
         begin_prompt(u, d, act, "Load");
         break;
@@ -3100,6 +3088,9 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
         break;
     case A_FMT_HI:
         doc_set_format(d, FMT_HI);
+        break;
+    case A_FMT_HAM:
+        doc_set_format(d, FMT_HAM);
         break;
     case A_ABOUT:
         u->about = 1;
@@ -4106,8 +4097,6 @@ static int tool_cell_at(const Ui *u, int lx, int ly, int *tool, int *undo, int *
             *special = CELL_SYM;
         } else if (kind == CELL_ZOOM) {
             *special = CELL_ZOOM;
-        } else {
-            *special = CELL_NA;
         }
         return 1;
     }
@@ -6166,10 +6155,6 @@ void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down)
                 u->magnify = 0;
                 doc_status(d, "Magnify");
             }
-            return;
-        }
-        if (special == CELL_NA) {
-            begin_prompt(u, d, -1, "Not in this build");
             return;
         }
         if (tool >= 0) {

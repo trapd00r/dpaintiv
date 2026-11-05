@@ -1764,6 +1764,38 @@ int main(void)
         expect(doc.frames[0].pix[10 * fw + 24] == 6 && doc.cur == 0, "stamp cel 2");
     }
     {
+        char mpath[256], prpath[256], hpath[256];
+        DpMove mv_out, mv_in;
+        DpFrame hframe;
+        DpColor hpal[DP_MAX_COLORS];
+        int hnc = 0, hcamg = 0;
+        char herr[120];
+        snprintf(mpath, sizeof(mpath), "%s/step.move", dir);
+        snprintf(prpath, sizeof(prpath), "%s/printed.ppm", dir);
+        snprintf(hpath, sizeof(hpath), "%s/ham6.ilbm", dir);
+
+        /* Move template IFF round-trip and execution */
+        memset(&mv_out, 0, sizeof(mv_out));
+        mv_out.dx = 16;
+        mv_out.dy = 8;
+        mv_out.dz = 0;
+        mv_out.rx = 0;
+        mv_out.ry = 0;
+        mv_out.rz = 45;
+        mv_out.count = 4;
+        mv_out.ease_in = 1;
+        mv_out.ease_out = 1;
+        mv_out.trails = 1;
+        mv_out.cyclic = 0;
+        mv_out.dir = 1;
+        expect(iff_save_move(mpath, &mv_out) == 0, "save move template");
+        memset(&mv_in, 0, sizeof(mv_in));
+        expect(iff_load_move(mpath, &mv_in, herr, 120) == 0, "load move template");
+        expect(mv_in.dx == 16 && mv_in.dy == 8 && mv_in.rz == 45 &&
+               mv_in.count == 4 && mv_in.ease_in == 1 && mv_in.trails == 1,
+               "move template fields round-trip");
+
+        /* Brush trim, shear, rotate any angle, bend, and metamorph */
         doc_clear(&doc);
         doc.fg = 4;
         doc.bg = 0;
@@ -1786,6 +1818,27 @@ int main(void)
         brush_bend(&doc.brush, 1, 3);
         expect(doc.brush.h >= 10, "bend horiz arches brush");
 
+        /* Perspective settings and render */
+        doc_clear(&doc);
+        doc_prsp_set(&doc, 25, 15, 10, 20, 20, 180);
+        {
+            int rx, ry, rz, px, py, pz;
+            doc_prsp_get(&doc, &rx, &ry, &rz, &px, &py, &pz);
+            expect(rx == 25 && ry == 15 && rz == 10 && px == 20 && py == 20 && pz == 180,
+                   "perspective DPPS fields");
+        }
+        doc_prsp_render(&doc, 0);
+        {
+            int i, ink = 0;
+            for (i = 0; i < doc.frames[doc.cur].w * doc.frames[doc.cur].h; i++) {
+                if (doc.frames[doc.cur].pix[i] != 0) {
+                    ink++;
+                }
+            }
+            expect(ink > 0, "perspective Do paints projected brush");
+        }
+
+        /* Translucency, Process, AntiAlias, and Background Fix */
         doc_clear(&doc);
         doc.translucency_on = 1;
         doc.translucency_pct = 50;
@@ -1805,52 +1858,27 @@ int main(void)
                "erasing with bg restores fixed background");
         doc_free_background(&doc);
 
+        /* Print Picture */
+        expect(doc_print_picture(&doc, prpath, 1, 0, 0, 100, 100) == 0, "print picture ppm");
+
+        /* Color Mixer & Ranges */
         ui_key(&ui, &doc, &assets, 'p', 'p');
         expect(ui.arrange == 1 && ui.mixer == 1, "p opens color mixer");
         ui_key(&ui, &doc, &assets, KEY_ESC, 0);
         expect(ui.arrange == 0 && ui.mixer == 0, "esc closes color mixer");
 
-        doc_clear(&doc);
-        doc_prsp_set(&doc, 25, 15, 10, 20, 20, 180);
-        {
-            int rx, ry, rz, px, py, pz;
-            doc_prsp_get(&doc, &rx, &ry, &rz, &px, &py, &pz);
-            expect(rx == 25 && ry == 15 && rz == 10 && px == 20 && py == 20 && pz == 180,
-                   "perspective DPPS fields");
-        }
-        doc_prsp_render(&doc, 0);
-        {
-            int i, ink = 0;
-            for (i = 0; i < doc.frames[doc.cur].w * doc.frames[doc.cur].h; i++) {
-                if (doc.frames[doc.cur].pix[i] != 0) {
-                    ink++;
-                }
-            }
-            expect(ink > 0, "perspective Do paints projected brush");
-        }
-        {
-            char mpath[256], herr[120];
-            DpMove mv_out, mv_in;
-            snprintf(mpath, sizeof(mpath), "%s/step.move", dir);
-            memset(&mv_out, 0, sizeof(mv_out));
-            mv_out.dx = 16;
-            mv_out.dy = 8;
-            mv_out.rz = 45;
-            mv_out.count = 4;
-            mv_out.ease_in = 1;
-            mv_out.ease_out = 1;
-            mv_out.trails = 1;
-            mv_out.dir = 1;
-            expect(iff_save_move(mpath, &mv_out) == 0, "save move template");
-            memset(&mv_in, 0, sizeof(mv_in));
-            expect(iff_load_move(mpath, &mv_in, herr, 120) == 0, "load move template");
-            expect(mv_in.dx == 16 && mv_in.dy == 8 && mv_in.rz == 45 &&
-                   mv_in.count == 4 && mv_in.ease_in == 1 && mv_in.trails == 1,
-                   "move template fields round-trip");
-            snprintf(mpath, sizeof(mpath), "%s/printed.ppm", dir);
-            expect(doc_print_picture(&doc, mpath, 1, 0, 0, 100, 100) == 0,
-                   "print picture ppm");
-        }
+        /* HAM format save and load */
+        doc_set_format(&doc, FMT_HAM);
+        expect((doc.camg & 0x800) != 0 && doc.ncolors == 64, "HAM format sets camg 0x800");
+        doc.frames[doc.cur].pix[0] = 2;
+        doc.frames[doc.cur].pix[1] = 35;
+        expect(iff_save_ilbm(hpath, &doc.frames[doc.cur], doc.pal, doc.ncolors,
+                             doc.camg, NULL, 0, 0, 0, 0, 0, 1, 0) == 0, "save HAM6 ilbm");
+        memset(&hframe, 0, sizeof(hframe));
+        expect(iff_load_ilbm(hpath, &hframe, hpal, &hnc, &hcamg, NULL, NULL,
+                             NULL, NULL, NULL, NULL, herr, 120) == 0, "load HAM6 ilbm");
+        expect((hcamg & 0x800) != 0 && hframe.w == 320 && hframe.h == 200, "loaded HAM6 header");
+        free(hframe.pix);
     }
     printf("smoke %s (%d fails) ppm %s\n", fails ? "FAILED" : "ok", fails, ppm);
     free(snap);

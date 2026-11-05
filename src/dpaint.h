@@ -46,7 +46,8 @@ enum {
     FMT_LO = 0,
     FMT_MED,
     FMT_LACE,
-    FMT_HI
+    FMT_HI,
+    FMT_HAM
 };
 
 enum {
@@ -261,8 +262,8 @@ typedef struct {
     int nranges_saved;
     int move_open;
     int prsp_open;
-    int bend_horiz;
     int place_handle;
+    int bend_horiz;
 } Ui;
 
 enum {

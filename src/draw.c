@@ -406,12 +406,18 @@ void doc_set_format(Doc *d, int fmt)
         h = 400;
         n = 16;
         camg = 0x8004;
+    } else if (fmt == FMT_HAM) {
+        w = 320;
+        h = 200;
+        n = 64;
+        camg = 0x0800;
     }
     if (doc_resize(d, w, h, n) == 0) {
         d->camg = camg;
         doc_status(d, fmt == FMT_LO ? "Lo-Res     320x200" :
                        fmt == FMT_MED ? "Med-Res    640x200" :
                        fmt == FMT_LACE ? "Interlace  320x400" :
+                       fmt == FMT_HAM ? "HAM        320x200" :
                        "Hi-Res     640x400");
     }
 }

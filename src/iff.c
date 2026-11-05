@@ -357,32 +357,147 @@ static int form_wrap(const char type[4], Buf *inner, uint8_t **out, int *outlen)
     return 0;
 }
 
+static uint8_t *ham6_encode_frame(const DpFrame *f, const DpColor *pal, int ncolors)
+{
+    int x, y, i;
+    int nbase = ncolors < 16 ? ncolors : 16;
+    uint8_t *out;
+    if (f == NULL || f->pix == NULL || f->w < 1 || f->h < 1 || pal == NULL) {
+        return NULL;
+    }
+    if (nbase < 1) {
+        nbase = 1;
+    }
+    out = (uint8_t *)malloc((size_t)f->w * (size_t)f->h);
+    if (out == NULL) {
+        return NULL;
+    }
+    for (y = 0; y < f->h; y++) {
+        int r = pal[0].r;
+        int g = pal[0].g;
+        int b = pal[0].b;
+        for (x = 0; x < f->w; x++) {
+            int idx = f->pix[y * f->w + x];
+            DpColor tc;
+            int best_code = 0;
+            int best_d = 1 << 30;
+            int br = r, bg = g, bb = b;
+            if (idx < 0 || idx >= ncolors) {
+                idx = 0;
+            }
+            tc = pal[idx];
+            for (i = 0; i < nbase; i++) {
+                int dr = (int)pal[i].r - (int)tc.r;
+                int dg = (int)pal[i].g - (int)tc.g;
+                int db = (int)pal[i].b - (int)tc.b;
+                int d = dr * dr + dg * dg + db * db;
+                if (d < best_d) {
+                    best_d = d;
+                    best_code = i;
+                    br = pal[i].r;
+                    bg = pal[i].g;
+                    bb = pal[i].b;
+                }
+            }
+            if (best_d > 0) {
+                int rn = ((int)tc.r + 8) / 17;
+                int gn = ((int)tc.g + 8) / 17;
+                int bn = ((int)tc.b + 8) / 17;
+                int nr, ng, nb, d;
+                if (rn > 15) {
+                    rn = 15;
+                }
+                if (gn > 15) {
+                    gn = 15;
+                }
+                if (bn > 15) {
+                    bn = 15;
+                }
+                nr = rn * 17;
+                ng = gn * 17;
+                nb = bn * 17;
+                d = (nr - tc.r) * (nr - tc.r) + (g - tc.g) * (g - tc.g) + (b - tc.b) * (b - tc.b);
+                if (d < best_d) {
+                    best_d = d;
+                    best_code = 0x20 | rn;
+                    br = nr;
+                    bg = g;
+                    bb = b;
+                }
+                d = (r - tc.r) * (r - tc.r) + (ng - tc.g) * (ng - tc.g) + (b - tc.b) * (b - tc.b);
+                if (d < best_d) {
+                    best_d = d;
+                    best_code = 0x30 | gn;
+                    br = r;
+                    bg = ng;
+                    bb = b;
+                }
+                d = (r - tc.r) * (r - tc.r) + (g - tc.g) * (g - tc.g) + (nb - tc.b) * (nb - tc.b);
+                if (d < best_d) {
+                    best_d = d;
+                    best_code = 0x10 | bn;
+                    br = r;
+                    bg = g;
+                    bb = nb;
+                }
+            }
+            r = br;
+            g = bg;
+            b = bb;
+            out[y * f->w + x] = (uint8_t)best_code;
+        }
+    }
+    return out;
+}
+
 int iff_save_ilbm(const char *path, const DpFrame *f,
                   const DpColor *pal, int ncolors, int camg,
                   const DpRange *ranges, int nranges,
                   int grab, int gx, int gy, int trans, int compression,
                   int slot)
 {
-    int planes;
+    int planes, cmap_colors;
     uint8_t bm[20], cm[DP_MAX_COLORS * 3], cr[DP_MAX_RANGES * 8];
     uint8_t cam[4], gr[4];
     uint8_t *body = NULL;
+    uint8_t *ham_pix = NULL;
+    DpFrame hf;
+    const DpFrame *src_f = f;
     int bodylen = 0, crlen;
     Buf b;
     uint8_t *file = NULL;
     int flen = 0;
     int rc;
     memset(&b, 0, sizeof(b));
-    ncolors = save_ncolors(f, 1, ncolors, slot);
-    planes = planes_for(ncolors);
-    if (build_body(f, planes, compression, &body, &bodylen) != 0) {
+    if (camg & 0x800) {
+        planes = 6;
+        cmap_colors = ncolors < 16 ? ncolors : 16;
+        if (cmap_colors < 2) {
+            cmap_colors = 2;
+        }
+        ham_pix = ham6_encode_frame(f, pal, ncolors < 1 ? 32 : ncolors);
+        if (ham_pix == NULL) {
+            return -1;
+        }
+        hf.w = f->w;
+        hf.h = f->h;
+        hf.pix = ham_pix;
+        src_f = &hf;
+    } else {
+        ncolors = save_ncolors(f, 1, ncolors, slot);
+        planes = planes_for(ncolors);
+        cmap_colors = ncolors;
+    }
+    if (build_body(src_f, planes, compression, &body, &bodylen) != 0) {
+        free(ham_pix);
         return -1;
     }
+    free(ham_pix);
     bmhd_pack(bm, f->w, f->h, planes, compression, trans, f->w, f->h);
-    cmap_pack(cm, pal, ncolors);
+    cmap_pack(cm, pal, cmap_colors);
     w32(cam, (uint32_t)camg);
     if (buf_chunk(&b, "BMHD", bm, 20) != 0 ||
-        buf_chunk(&b, "CMAP", cm, ncolors * 3) != 0 ||
+        buf_chunk(&b, "CMAP", cm, cmap_colors * 3) != 0 ||
         buf_chunk(&b, "CAMG", cam, 4) != 0) {
         free(body);
         free(b.p);
@@ -1069,13 +1184,9 @@ static int parse_ilbm(const uint8_t *p, int n, Ilbm *im, char *err, int errlen)
         set_err(err, errlen, "Bad IFF Form");
         return -1;
     }
-    if ((im->camg & 0x800) && im->planes != 6) {
-        set_err(err, errlen, "HAM not in this build");
-        return -1;
-    }
     if (im->planes < 1 && im->op == 5) {
         im->planes = 0;
-    } else if (im->planes < 1 || im->planes > 6) {
+    } else if (im->planes < 1 || im->planes > 8) {
         set_err(err, errlen, "Bad IFF Form");
         return -1;
     }
@@ -1130,14 +1241,14 @@ static int nearest_pal(const DpColor *pal, int n, int r, int g, int b)
     return best;
 }
 
-/* Six planes are HAM unless the file is an indexed 64-color picture. */
+/* Six planes (or CAMG HAM bit) are HAM unless the file is an indexed 64-color picture. */
 static int is_ham6(int planes, int camg, int ncolors)
 {
+    if (camg & 0x800) {
+        return planes == 5 || planes == 6;
+    }
     if (planes != 6) {
         return 0;
-    }
-    if (camg & 0x800) {
-        return 1;
     }
     if (ncolors > 32) {
         return 0;
@@ -1148,7 +1259,7 @@ static int is_ham6(int planes, int camg, int ncolors)
 static void ham_quantize(uint8_t *pix, int w, int h, DpColor *pal, int *ncolors, int grow)
 {
     DpColor base[16];
-    int nbase, i, n, r, g, b, npix;
+    int nbase, x, y, n, r, g, b;
     nbase = *ncolors;
     if (nbase < 1) {
         nbase = 1;
@@ -1164,23 +1275,25 @@ static void ham_quantize(uint8_t *pix, int w, int h, DpColor *pal, int *ncolors,
     if (n > DP_MAX_COLORS) {
         n = DP_MAX_COLORS;
     }
-    r = base[0].r;
-    g = base[0].g;
-    b = base[0].b;
-    npix = w * h;
-    for (i = 0; i < npix; i++) {
-        int idx, dist;
-        ham_step(pix[i], base, nbase, &r, &g, &b);
-        idx = nearest_pal(pal, n, r, g, b);
-        dist = color_dist(pal[idx], r, g, b);
-        if (grow && dist > 48 * 48 && n < DP_MAX_COLORS) {
-            pal[n].r = (uint8_t)r;
-            pal[n].g = (uint8_t)g;
-            pal[n].b = (uint8_t)b;
-            idx = n;
-            n++;
+    for (y = 0; y < h; y++) {
+        r = base[0].r;
+        g = base[0].g;
+        b = base[0].b;
+        for (x = 0; x < w; x++) {
+            int i = y * w + x;
+            int idx, dist;
+            ham_step(pix[i], base, nbase, &r, &g, &b);
+            idx = nearest_pal(pal, n, r, g, b);
+            dist = color_dist(pal[idx], r, g, b);
+            if (grow && dist > 0 && n < DP_MAX_COLORS) {
+                pal[n].r = (uint8_t)r;
+                pal[n].g = (uint8_t)g;
+                pal[n].b = (uint8_t)b;
+                idx = n;
+                n++;
+            }
+            pix[i] = (uint8_t)idx;
         }
-        pix[i] = (uint8_t)idx;
     }
     if (grow) {
         *ncolors = n;
