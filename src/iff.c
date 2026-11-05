@@ -1026,6 +1026,12 @@ static int parse_ilbm(const uint8_t *p, int n, Ilbm *im, char *err, int errlen)
                 rg->high = data[o + 7];
                 o += 8;
             }
+        } else if (memcmp(id, "DRNG", 4) == 0 && len >= 6 && im->nranges < DP_MAX_RANGES) {
+            DpRange *rg = &im->ranges[im->nranges++];
+            rg->low = data[0];
+            rg->high = data[1];
+            rg->rate = r16(data + 2);
+            rg->active = (r16(data + 4) & 1) ? 1 : 0;
         } else if (memcmp(id, "GRAB", 4) == 0 && len >= 4) {
             im->grab = 1;
             im->gx = (int16_t)r16(data);

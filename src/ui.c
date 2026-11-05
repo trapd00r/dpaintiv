@@ -67,9 +67,12 @@ enum {
     A_AA_NONE, A_AA_LOW, A_AA_HIGH,
     A_PROC_ON, A_PROC_MODE,
     A_TRANS_ON, A_TRANS_SET,
-    A_CYCLE, A_USEPAL, A_RESTORE_PAL, A_DEFAULT_PAL, A_BG_FG, A_SWAP_FG,
-    A_REMAP, A_TRANS, A_FONT, A_PREF,
-    A_PANEL_ON, A_PANEL_OFF, A_VER2026, A_ARRANGE
+    A_RANGES, A_CYCLE, A_MIXER, A_ARRANGE,
+    A_USEPAL, A_RESTORE_PAL, A_DEFAULT_PAL, A_LOAD_PAL, A_SAVE_PAL,
+    A_BG_FG, A_SWAP_FG, A_REMAP, A_RECOMPUTE,
+    A_BR_BG_FG, A_BR_SWAP_FG, A_BR_REMAP, A_TRANS,
+    A_FONT, A_PREF,
+    A_PANEL_ON, A_PANEL_OFF, A_VER2026
 };
 
 typedef struct Item {
@@ -260,18 +263,34 @@ static const Item effect_items[] = {
 };
 
 static const Item pal_items[] = {
-    {"Arrange", A_ARRANGE, 0, NULL, 0},
+    {"Mixer On/Off", A_MIXER, 0, NULL, 0, "(p)"},
+    {"Arrange", A_ARRANGE, 0, NULL, 0, "(P)"},
     {"Use Brush Palette", A_USEPAL, 0, NULL, 0},
     {"Restore Palette", A_RESTORE_PAL, 0, NULL, 0},
-    {"Default Palette", A_DEFAULT_PAL, 0, NULL, 0}
+    {"Default Palette", A_DEFAULT_PAL, 0, NULL, 0},
+    {"Load..", A_LOAD_PAL, 0, NULL, 0},
+    {"Save..", A_SAVE_PAL, 0, NULL, 0}
+};
+static const Item cset_items[] = {
+    {"Load..", A_LOAD_PAL, 0, NULL, 0},
+    {"Save..", A_SAVE_PAL, 0, NULL, 0}
+};
+static const Item cbrush_items[] = {
+    {"BG -> FG", A_BR_BG_FG, 0, NULL, 0},
+    {"BG <-> FG", A_BR_SWAP_FG, 0, NULL, 0},
+    {"Remap ", A_BR_REMAP, 0, NULL, 0},
+    {"Change Transparency", A_TRANS, 0, NULL, 0}
 };
 static const Item color_items[] = {
-    {"Cycle", A_CYCLE, 0, NULL, 0},
-    {"Palette", 0, 0, pal_items, 4},
+    {"Ranges..", A_RANGES, 0, NULL, 0},
+    {"Cycle", A_CYCLE, 0, NULL, 0, "(tab)"},
+    {"Palette", 0, 0, pal_items, 7},
+    {"Color Set", 0, 0, cset_items, 2},
     {"BG -> FG", A_BG_FG, 0, NULL, 0},
     {"BG <-> FG", A_SWAP_FG, 0, NULL, 0},
     {"Remap ", A_REMAP, 0, NULL, 0},
-    {"Change Transparency", A_TRANS, 0, NULL, 0}
+    {"Recompute", A_RECOMPUTE, 0, NULL, 0},
+    {"Brush", 0, 0, cbrush_items, 4}
 };
 
 static const Item pref_items[] = {
@@ -330,7 +349,7 @@ static const MenuBar bars[] = {
     {"Brush", brush_items, 10},
     {"Mode", mode_items, 10},
     {"Anim", anim_items, 6},
-    {"Color", color_items, 6},
+    {"Color", color_items, 9},
     {"Effect", effect_items, 7},
     {"Font", font_items, 1},
     {"Prefs", pref_items, 12}
@@ -771,6 +790,9 @@ static int item_checked(const Ui *u, const Doc *d, const Item *it)
     if (it->act == A_TRANS_ON) {
         return d->translucency_on;
     }
+    if (it->act == A_MIXER) {
+        return u->mixer;
+    }
     return 0;
 }
 
@@ -944,6 +966,10 @@ static const char *req_title(int act)
         return "Load Stencil";
     case A_ST_SAVE:
         return "Save Stencil";
+    case A_LOAD_PAL:
+        return "Load Palette";
+    case A_SAVE_PAL:
+        return "Save Palette";
     case A_DELETE:
         return "Delete File";
     case A_PAGE:
@@ -996,6 +1022,8 @@ static int file_act(int act)
     case A_AB_SAVE:
     case A_ST_LOAD:
     case A_ST_SAVE:
+    case A_LOAD_PAL:
+    case A_SAVE_PAL:
         return 1;
     default:
         return 0;
@@ -1631,6 +1659,8 @@ static void draw_hover(const Ui *u, const Doc *d, const DpAssets *a,
 static void draw_enh(const Ui *u, const DpAssets *a, uint8_t *rgb, int w, int h);
 static void draw_arrange(const Ui *u, const Doc *d, const DpAssets *a,
                          uint8_t *rgb, int w, int h);
+static void draw_ranges(const Ui *u, const Doc *d, const DpAssets *a,
+                        uint8_t *rgb, int w, int h);
 static void draw_wheel_swatch(const Ui *u, const Doc *d, uint8_t *rgb, int w, int h);
 
 void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
@@ -2106,7 +2136,7 @@ void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
         dp_font_rgb(f, rgb, w, h, (cx + 4) * s, (cy + 2) * s, "Cancel", 255, 255, 255, s);
     }
     if (u->pointer_seen && u->over_page && !u->prompt && u->menu_open < 0 &&
-        !u->about && !u->printer) {
+        !u->about && !u->printer && !u->range_open) {
         int k;
         int cx = u->pointer_x;
         int cy = u->pointer_y;
@@ -2120,6 +2150,7 @@ void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
     }
     draw_hover(u, d, a, rgb, w, h);
     draw_enh(u, a, rgb, w, h);
+    draw_ranges(u, d, a, rgb, w, h);
     draw_arrange(u, d, a, rgb, w, h);
     draw_wheel_swatch(u, d, rgb, w, h);
 }
@@ -2686,6 +2717,34 @@ static void finish_prompt(Ui *u, Doc *d)
         d->translucency_on = 1;
         doc_status(d, "Translucency");
         break;
+    case A_LOAD_PAL: {
+        DpFrame fr;
+        DpColor pal[DP_MAX_COLORS];
+        int nc = 0;
+        char err[120];
+        memset(&fr, 0, sizeof(fr));
+        err[0] = 0;
+        if (iff_load_ilbm(path, &fr, pal, &nc, NULL, NULL, NULL,
+                          NULL, NULL, NULL, NULL, err, (int)sizeof(err)) == 0 &&
+            nc > 0) {
+            int copy = nc < DP_MAX_COLORS ? nc : DP_MAX_COLORS;
+            memcpy(d->pal, pal, (size_t)copy * sizeof(DpColor));
+            free(fr.pix);
+            doc_status(d, "Load");
+        } else {
+            free(fr.pix);
+            doc_status(d, err[0] ? err : "Can't Load");
+        }
+        break;
+    }
+    case A_SAVE_PAL:
+        if (iff_save_ilbm(path, &d->frames[d->cur], d->pal, d->ncolors, d->camg,
+                          d->ranges, d->nranges, 0, 0, 0, 0, 1, used_slot(d)) == 0) {
+            doc_status(d, "Save");
+        } else {
+            doc_status(d, "Can't Save");
+        }
+        break;
     case A_ADD:
     case A_COPYF:
         n = atoi(path);
@@ -2819,7 +2878,8 @@ static void finish_prompt(Ui *u, Doc *d)
     }
     if ((act == A_LOAD_PIC || act == A_SAVE_PIC || act == A_LOAD_BR ||
          act == A_SAVE_BR || act == A_LOAD_ANIM || act == A_SAVE_ANIM ||
-         act == A_AB_LOAD || act == A_AB_SAVE) &&
+         act == A_AB_LOAD || act == A_AB_SAVE || act == A_LOAD_PAL ||
+         act == A_SAVE_PAL) &&
         (strcmp(d->status, "Load") == 0 || strcmp(d->status, "Save") == 0)) {
         char kept[512];
         char *slash;
@@ -3325,6 +3385,20 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
         snprintf(u->text, sizeof(u->text), "%d", d->translucency_pct > 0 ? d->translucency_pct : 50);
         u->text_len = (int)strlen(u->text);
         break;
+    case A_RANGES:
+        memcpy(u->range_saved, d->ranges, sizeof(d->ranges));
+        u->nranges_saved = d->nranges;
+        if (d->nranges < 1) {
+            d->nranges = 1;
+            d->ranges[0].low = 20;
+            d->ranges[0].high = 31;
+            d->ranges[0].rate = 16;
+        }
+        u->range_idx = 0;
+        u->range_pick_hi = 0;
+        u->range_open = 1;
+        doc_status(d, "Ranges..");
+        break;
     case A_CYCLE:
         if (d->nranges < 1) {
             d->nranges = 1;
@@ -3333,6 +3407,24 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
         }
         d->ranges[0].active = !d->ranges[0].active;
         doc_status(d, "Cycle");
+        break;
+    case A_MIXER:
+        if (u->arrange && u->mixer) {
+            u->arrange = 0;
+            u->mixer = 0;
+            u->arr_op = 0;
+            doc_status(d, "Mixer Off");
+        } else {
+            memcpy(u->arr_open, d->pal, sizeof(d->pal));
+            u->arr_undo_ok = 0;
+            u->arr_top = 0;
+            u->arr_sel = d->fg;
+            u->arr_op = 0;
+            u->arr_from = d->fg;
+            u->arrange = 1;
+            u->mixer = 1;
+            doc_status(d, "Mixer On/Off");
+        }
         break;
     case A_USEPAL:
         if (d->brush.has_pal) {
@@ -3350,6 +3442,12 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
             memcpy(d->pal, a->pal, sizeof(d->pal));
             doc_status(d, "Default Palette");
         }
+        break;
+    case A_LOAD_PAL:
+        begin_prompt(u, d, A_LOAD_PAL, "Load");
+        break;
+    case A_SAVE_PAL:
+        begin_prompt(u, d, A_SAVE_PAL, "Save");
         break;
     case A_BG_FG:
         doc_checkpoint(d);
@@ -3375,7 +3473,53 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
         doc_status(d, "BG <-> FG");
         break;
     case A_REMAP:
+        doc_checkpoint(d);
+        doc_remap_page(d);
         doc_status(d, "Remap ");
+        break;
+    case A_RECOMPUTE:
+        doc_recompute_palette(d);
+        doc_status(d, "Recompute");
+        break;
+    case A_BR_BG_FG:
+        if (need_brush(d) == 0) {
+            n = d->brush.w * d->brush.h;
+            for (i = 0; i < n; i++) {
+                if (d->brush.pix[i] == (uint8_t)d->bg) {
+                    d->brush.pix[i] = (uint8_t)d->fg;
+                }
+            }
+            doc_status(d, "BG -> FG");
+        }
+        break;
+    case A_BR_SWAP_FG:
+        if (need_brush(d) == 0) {
+            n = d->brush.w * d->brush.h;
+            for (i = 0; i < n; i++) {
+                uint8_t c = d->brush.pix[i];
+                if (c == (uint8_t)d->bg) {
+                    d->brush.pix[i] = (uint8_t)d->fg;
+                } else if (c == (uint8_t)d->fg) {
+                    d->brush.pix[i] = (uint8_t)d->bg;
+                }
+            }
+            doc_status(d, "BG <-> FG");
+        }
+        break;
+    case A_BR_REMAP:
+        if (need_brush(d) == 0) {
+            n = d->brush.w * d->brush.h;
+            for (i = 0; i < n; i++) {
+                uint8_t c = d->brush.pix[i];
+                if (c != d->brush.trans && c < DP_MAX_COLORS) {
+                    DpColor col = d->brush.has_pal ? d->brush.pal[c] : d->pal_saved[c];
+                    d->brush.pix[i] = (uint8_t)doc_nearest(d, col.r, col.g, col.b);
+                }
+            }
+            memcpy(d->brush.pal, d->pal, sizeof(d->pal));
+            d->brush.has_pal = 1;
+            doc_status(d, "Remap ");
+        }
         break;
     case A_TRANS:
         if (d->brush.pix) {
@@ -4023,7 +4167,7 @@ static int hover_id_at(const Ui *u, const Doc *d, int lx, int ly)
     int bsize, tool, undo, clearb, special, idx;
     int bar_y, bar_w, arr_l, arr_r, sl_x, sl_w, btn_x, i;
     if (u->prompt || u->about || u->printer || u->menu_open >= 0 || u->enh_open ||
-        u->arrange) {
+        u->arrange || u->range_open) {
         return 0;
     }
     bsize = brush_size_at(u, lx, ly);
@@ -4472,7 +4616,8 @@ static void place_pointer(Ui *u, Doc *d, int mx, int my)
     u->pointer_seen = 1;
     u->over_page = over && px >= 0 && py >= 0 && px < page_w(d) && py < page_h(d);
     u->cursor_cross = (u->over_page && !u->prompt && u->menu_open < 0 &&
-                       !u->about && !u->printer && !u->enh_open && !u->arrange) ? 1 : 0;
+                       !u->about && !u->printer && !u->enh_open && !u->arrange &&
+                       !u->range_open) ? 1 : 0;
     if (u->over_page) {
         u->mpx = px;
         u->mpy = py;
@@ -4667,14 +4812,14 @@ static void arr_geom(const Ui *u, int *x, int *y, int *w, int *h,
     }
     *cell = c;
     *w = lw;
-    *h = 12 + c * 2 + 16;
+    *h = 12 + c * 2 + 16 + (u->mixer ? 36 : 0);
     *x = 0;
     *y = lh - *h;
     if (*y < MENU_H + 2) {
         *y = MENU_H + 2;
     }
     *wx = 40;
-    *wy = *y + 12;
+    *wy = *y + 12 + (u->mixer ? 36 : 0);
 }
 
 static void arr_btns(const Ui *u, const DpFont *f, int y, int h,
@@ -4767,12 +4912,146 @@ static void arr_apply_well(Ui *u, Doc *d, int idx)
     }
 }
 
+static void mix_rgb_to_hsv(int r, int g, int b, int *h, int *s, int *v)
+{
+    int max = r, min = r, dlt;
+    if (g > max) {
+        max = g;
+    }
+    if (b > max) {
+        max = b;
+    }
+    if (g < min) {
+        min = g;
+    }
+    if (b < min) {
+        min = b;
+    }
+    *v = max * 15 / 255;
+    dlt = max - min;
+    if (max <= 0 || dlt == 0) {
+        *s = 0;
+        *h = 0;
+        return;
+    }
+    *s = dlt * 15 / max;
+    if (max == r) {
+        *h = 60 * (g - b) / dlt;
+    } else if (max == g) {
+        *h = 120 + 60 * (b - r) / dlt;
+    } else {
+        *h = 240 + 60 * (r - g) / dlt;
+    }
+    if (*h < 0) {
+        *h += 360;
+    }
+    *h = *h * 15 / 359;
+}
+
+static void mix_hsv_to_rgb(int h, int s, int v, DpColor *c)
+{
+    int deg = h * 359 / 15;
+    int sat = s * 255 / 15;
+    int val = v * 255 / 15;
+    int i, f, p, q, t;
+    if (sat <= 0) {
+        c->r = c->g = c->b = (uint8_t)val;
+        return;
+    }
+    i = (deg / 60) % 6;
+    f = deg % 60;
+    p = val * (255 - sat) / 255;
+    q = val * (255 - sat * f / 60) / 255;
+    t = val * (255 - sat * (60 - f) / 60) / 255;
+    if (i == 0) {
+        c->r = (uint8_t)val;
+        c->g = (uint8_t)t;
+        c->b = (uint8_t)p;
+    } else if (i == 1) {
+        c->r = (uint8_t)q;
+        c->g = (uint8_t)val;
+        c->b = (uint8_t)p;
+    } else if (i == 2) {
+        c->r = (uint8_t)p;
+        c->g = (uint8_t)val;
+        c->b = (uint8_t)t;
+    } else if (i == 3) {
+        c->r = (uint8_t)p;
+        c->g = (uint8_t)q;
+        c->b = (uint8_t)val;
+    } else if (i == 4) {
+        c->r = (uint8_t)t;
+        c->g = (uint8_t)p;
+        c->b = (uint8_t)val;
+    } else {
+        c->r = (uint8_t)val;
+        c->g = (uint8_t)p;
+        c->b = (uint8_t)q;
+    }
+}
+
+static void mixer_set_channel(Ui *u, Doc *d, int ch, int val)
+{
+    int idx = u->arr_sel >= 0 && u->arr_sel < d->ncolors ? u->arr_sel : d->fg;
+    int v0, v1, v2;
+    if (idx < 0 || idx >= d->ncolors) {
+        return;
+    }
+    if (val < 0) {
+        val = 0;
+    }
+    if (val > 15) {
+        val = 15;
+    }
+    arr_remember(u, d);
+    if (!u->mix_hsv) {
+        if (ch == 0) {
+            d->pal[idx].r = (uint8_t)(val * 17);
+        } else if (ch == 1) {
+            d->pal[idx].g = (uint8_t)(val * 17);
+        } else {
+            d->pal[idx].b = (uint8_t)(val * 17);
+        }
+    } else {
+        mix_rgb_to_hsv(d->pal[idx].r, d->pal[idx].g, d->pal[idx].b, &v0, &v1, &v2);
+        if (ch == 0) {
+            v0 = val;
+        } else if (ch == 1) {
+            v1 = val;
+        } else {
+            v2 = val;
+        }
+        mix_hsv_to_rgb(v0, v1, v2, &d->pal[idx]);
+    }
+}
+
 static int arr_click(Ui *u, Doc *d, DpAssets *a, int lx, int ly, int button)
 {
     int x, y, w, h, cell, wx, wy, i, idx;
     int bx[8], bw[8], by, bh;
     const DpFont *f = font(a, u);
     arr_geom(u, &x, &y, &w, &h, &cell, &wx, &wy);
+    if (u->mixer && ly >= y + 12 && ly < y + 46) {
+        if (lx >= 4 && lx < 36 && ly >= y + 12 && ly < y + 24) {
+            u->mix_hsv = 0;
+            doc_status(d, "RGB");
+            return 1;
+        }
+        if (lx >= 4 && lx < 36 && ly >= y + 26 && ly < y + 38) {
+            u->mix_hsv = 1;
+            doc_status(d, "HSV");
+            return 1;
+        }
+        for (i = 0; i < 3; i++) {
+            int sy = y + 13 + i * 11;
+            if (lx >= 52 && lx < 52 + 128 && ly >= sy && ly < sy + 9) {
+                int v = (lx - 52) * 16 / 128;
+                mixer_set_channel(u, d, i, v);
+                u->mix_drag = i + 1;
+                return 1;
+            }
+        }
+    }
     if (u->arr_op == 4 && ly < y) {
         int px, py, over;
         page_pos(u, d, lx * sc(u), ly * sc(u), &px, &py, &over);
@@ -4863,6 +5142,7 @@ static int arr_click(Ui *u, Doc *d, DpAssets *a, int lx, int ly, int button)
                 doc_status(d, "UNDO");
             } else if (i == 7) {
                 u->arrange = 0;
+                u->mixer = 0;
                 u->arr_op = 0;
                 doc_status(d, "OK");
             }
@@ -4896,6 +5176,43 @@ static void draw_arrange(const Ui *u, const Doc *d, const DpAssets *a,
     fg = d->pal[u->arr_sel >= 0 && u->arr_sel < d->ncolors ? u->arr_sel : 0];
     bg = d->pal[d->bg >= 0 && d->bg < d->ncolors ? d->bg : 0];
     fill_rect(rgb, w, hgt, 16 * s, (y + 1) * s, 10 * s, 8 * s, bg.r, bg.g, bg.b);
+    if (u->mixer) {
+        static const char *const rgb_ch[3] = {"R", "G", "B"};
+        static const char *const hsv_ch[3] = {"H", "S", "V"};
+        int vals[3];
+        if (!u->mix_hsv) {
+            vals[0] = (fg.r + 8) / 17;
+            vals[1] = (fg.g + 8) / 17;
+            vals[2] = (fg.b + 8) / 17;
+        } else {
+            mix_rgb_to_hsv(fg.r, fg.g, fg.b, &vals[0], &vals[1], &vals[2]);
+        }
+        fill_rect(rgb, w, hgt, 4 * s, (y + 12) * s, 30 * s, 11 * s,
+                  u->mix_hsv ? 200 : 40, u->mix_hsv ? 200 : 40, u->mix_hsv ? 200 : 40);
+        fill_rect(rgb, w, hgt, 4 * s, (y + 25) * s, 30 * s, 11 * s,
+                  u->mix_hsv ? 40 : 200, u->mix_hsv ? 40 : 200, u->mix_hsv ? 40 : 200);
+        if (f != NULL) {
+            dp_font_rgb(f, rgb, w, hgt, 8 * s, (y + 14) * s, "RGB",
+                        u->mix_hsv ? 0 : 255, u->mix_hsv ? 0 : 255, u->mix_hsv ? 0 : 255, s);
+            dp_font_rgb(f, rgb, w, hgt, 8 * s, (y + 27) * s, "HSV",
+                        u->mix_hsv ? 255 : 0, u->mix_hsv ? 255 : 0, u->mix_hsv ? 255 : 0, s);
+        }
+        for (i = 0; i < 3; i++) {
+            int sy = y + 13 + i * 11;
+            int knob = vals[i] < 0 ? 0 : (vals[i] > 15 ? 15 : vals[i]);
+            char vbuf[8];
+            if (f != NULL) {
+                dp_font_rgb(f, rgb, w, hgt, 40 * s, sy * s,
+                            u->mix_hsv ? hsv_ch[i] : rgb_ch[i], 0, 0, 0, s);
+            }
+            fill_rect(rgb, w, hgt, 52 * s, (sy + 2) * s, 128 * s, 5 * s, 80, 80, 80);
+            fill_rect(rgb, w, hgt, (52 + knob * 8) * s, sy * s, 6 * s, 9 * s, 210, 0, 0);
+            snprintf(vbuf, sizeof(vbuf), "%d", knob);
+            if (f != NULL) {
+                dp_font_rgb(f, rgb, w, hgt, 184 * s, sy * s, vbuf, 0, 0, 0, s);
+            }
+        }
+    }
     fill_rect(rgb, w, hgt, 4 * s, (wy) * s, 30 * s, (cell * 2) * s, fg.r, fg.g, fg.b);
     fill_rect(rgb, w, hgt, 4 * s, wy * s, 30 * s, s, 255, 255, 255);
     fill_rect(rgb, w, hgt, 4 * s, wy * s, s, cell * 2 * s, 255, 255, 255);
@@ -4940,6 +5257,178 @@ static void draw_arrange(const Ui *u, const Doc *d, const DpAssets *a,
     }
 }
 
+static void box_dlg(const Ui *u, int bw, int bh, int *bx, int *by)
+{
+    int lw = log_w(u);
+    int lh = log_h(u);
+    *bx = (lw - bw) / 2;
+    if (*bx < 4) {
+        *bx = 4;
+    }
+    *by = (lh - bh) / 2;
+    if (*by < MENU_H + 2) {
+        *by = MENU_H + 2;
+    }
+}
+
+static void draw_btn(const DpFont *f, uint8_t *rgb, int w, int h, int s,
+                     int x, int y, int bw, int bh, const char *lbl, int hot)
+{
+    fill_rect(rgb, w, h, x * s, y * s, bw * s, bh * s,
+              hot ? 20 : 184, hot ? 70 : 184, hot ? 180 : 184);
+    fill_rect(rgb, w, h, x * s, y * s, bw * s, s, 240, 240, 240);
+    fill_rect(rgb, w, h, x * s, (y + bh - 1) * s, bw * s, s, 90, 90, 90);
+    if (f != NULL && lbl != NULL) {
+        int tw = dp_font_width(f, lbl);
+        int tx = x + (bw - tw) / 2;
+        dp_font_rgb(f, rgb, w, h, tx * s, (y + 2) * s, lbl,
+                    hot ? 255 : 0, hot ? 255 : 0, hot ? 255 : 0, s);
+    }
+}
+
+static void draw_ranges(const Ui *u, const Doc *d, const DpAssets *a,
+                        uint8_t *rgb, int w, int h)
+{
+    const DpFont *f = font(a, u);
+    int s = sc(u);
+    int bx, by, bw = 236, bh = 116, i;
+    int ri = u->range_idx >= 0 && u->range_idx < DP_MAX_RANGES ? u->range_idx : 0;
+    const DpRange *rg = &d->ranges[ri];
+    char buf[48];
+    if (!u->range_open || f == NULL) {
+        return;
+    }
+    box_dlg(u, bw, bh, &bx, &by);
+    fill_rect(rgb, w, h, bx * s, by * s, bw * s, bh * s, 204, 204, 204);
+    fill_rect(rgb, w, h, bx * s, by * s, bw * s, 12 * s, 20, 70, 180);
+    dp_font_rgb(f, rgb, w, h, (bx + 6) * s, (by + 2) * s, "RANGE:", 255, 255, 255, s);
+    for (i = 0; i < 4; i++) {
+        char num[4];
+        snprintf(num, sizeof(num), "%d", i + 1);
+        draw_btn(f, rgb, w, h, s, bx + 56 + i * 22, by + 16, 18, 12, num, ri == i);
+    }
+    snprintf(buf, sizeof(buf), "SELECTED: %d .. %d", rg->low, rg->high);
+    dp_font_rgb(f, rgb, w, h, (bx + 8) * s, (by + 34) * s, buf, 0, 0, 0, s);
+    snprintf(buf, sizeof(buf), "RATE: %d", rg->rate);
+    dp_font_rgb(f, rgb, w, h, (bx + 8) * s, (by + 50) * s, buf, 0, 0, 0, s);
+    draw_btn(f, rgb, w, h, s, bx + 78, by + 48, 16, 12, "-", 0);
+    draw_btn(f, rgb, w, h, s, bx + 98, by + 48, 16, 12, "+", 0);
+    draw_btn(f, rgb, w, h, s, bx + 122, by + 48, 48, 12, "Active", rg->active);
+    draw_btn(f, rgb, w, h, s, bx + 174, by + 48, 52, 12, "REVERSE", 0);
+    for (i = 0; i < 32 && i < d->ncolors; i++) {
+        int cx = bx + 8 + (i % 16) * 14;
+        int cy = by + 64 + (i / 16) * 12;
+        fill_rect(rgb, w, h, cx * s, cy * s, 13 * s, 11 * s,
+                  d->pal[i].r, d->pal[i].g, d->pal[i].b);
+        if (i >= rg->low && i <= rg->high) {
+            fill_rect(rgb, w, h, cx * s, cy * s, 13 * s, s, 255, 255, 255);
+            fill_rect(rgb, w, h, cx * s, (cy + 10) * s, 13 * s, s, 255, 255, 255);
+        }
+    }
+    draw_btn(f, rgb, w, h, s, bx + 8, by + bh - 18, 44, 12, "CLEAR", 0);
+    draw_btn(f, rgb, w, h, s, bx + 60, by + bh - 18, 48, 12, "SPREAD", 0);
+    draw_btn(f, rgb, w, h, s, bx + 124, by + bh - 18, 44, 12, "OK", 1);
+    draw_btn(f, rgb, w, h, s, bx + 176, by + bh - 18, 52, 12, "CANCEL", 0);
+}
+
+static int ranges_click(Ui *u, Doc *d, int lx, int ly)
+{
+    int bx, by, bw = 236, bh = 116, i;
+    int ri = u->range_idx >= 0 && u->range_idx < DP_MAX_RANGES ? u->range_idx : 0;
+    DpRange *rg;
+    box_dlg(u, bw, bh, &bx, &by);
+    if (d->nranges < ri + 1) {
+        d->nranges = ri + 1;
+    }
+    rg = &d->ranges[ri];
+    if (ly >= by + 16 && ly < by + 28) {
+        for (i = 0; i < 4; i++) {
+            if (lx >= bx + 56 + i * 22 && lx < bx + 56 + i * 22 + 18) {
+                u->range_idx = i;
+                if (d->nranges <= i) {
+                    d->nranges = i + 1;
+                    if (d->ranges[i].rate <= 0) {
+                        d->ranges[i].rate = 16;
+                    }
+                }
+                u->range_pick_hi = 0;
+                return 1;
+            }
+        }
+    }
+    if (ly >= by + 48 && ly < by + 60) {
+        if (lx >= bx + 78 && lx < bx + 94 && rg->rate > 1) {
+            rg->rate -= 2;
+            if (rg->rate < 1) {
+                rg->rate = 1;
+            }
+        } else if (lx >= bx + 98 && lx < bx + 114 && rg->rate < 60) {
+            rg->rate += 2;
+        } else if (lx >= bx + 122 && lx < bx + 170) {
+            rg->active = !rg->active;
+        } else if (lx >= bx + 174 && lx < bx + 226) {
+            int a = rg->low, b = rg->high;
+            while (a < b && a >= 0 && b < d->ncolors) {
+                DpColor t = d->pal[a];
+                d->pal[a] = d->pal[b];
+                d->pal[b] = t;
+                a++;
+                b--;
+            }
+            doc_status(d, "REVERSE");
+        }
+        return 1;
+    }
+    if (ly >= by + 64 && ly < by + 88 && lx >= bx + 8 && lx < bx + 8 + 16 * 14) {
+        int col = (lx - (bx + 8)) / 14;
+        int row = (ly - (by + 64)) / 12;
+        int idx = row * 16 + col;
+        if (idx >= 0 && idx < d->ncolors) {
+            if (!u->range_pick_hi) {
+                rg->low = idx;
+                if (rg->high < rg->low) {
+                    rg->high = rg->low;
+                }
+                u->range_pick_hi = 1;
+            } else {
+                if (idx < rg->low) {
+                    rg->high = rg->low;
+                    rg->low = idx;
+                } else {
+                    rg->high = idx;
+                }
+                u->range_pick_hi = 0;
+            }
+        }
+        return 1;
+    }
+    if (ly >= by + bh - 18 && ly < by + bh - 6) {
+        if (lx >= bx + 8 && lx < bx + 52) {
+            rg->low = 0;
+            rg->high = 0;
+            rg->active = 0;
+            return 1;
+        }
+        if (lx >= bx + 60 && lx < bx + 108) {
+            doc_pal_spread(d, rg->low, rg->high);
+            return 1;
+        }
+        if (lx >= bx + 124 && lx < bx + 168) {
+            u->range_open = 0;
+            doc_status(d, "OK");
+            return 1;
+        }
+        if (lx >= bx + 176 && lx < bx + 228) {
+            memcpy(d->ranges, u->range_saved, sizeof(d->ranges));
+            d->nranges = u->nranges_saved;
+            u->range_open = 0;
+            doc_status(d, "CANCEL");
+            return 1;
+        }
+    }
+    return 1;
+}
+
 void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down)
 {
     sync_fonts(a);
@@ -4953,7 +5442,9 @@ void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down)
     place_pointer(u, d, mx, my);
 
     if (u->arrange) {
-        if (down) {
+        if (!down) {
+            u->mix_drag = 0;
+        } else {
             arr_click(u, d, a, lx, ly, button);
         }
         return;
@@ -4962,6 +5453,13 @@ void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down)
     if (u->enh_open) {
         if (down && button == 1) {
             enh_click(u, d, lx, ly);
+        }
+        return;
+    }
+
+    if (u->range_open) {
+        if (down && button == 1) {
+            ranges_click(u, d, lx, ly);
         }
         return;
     }
@@ -5326,6 +5824,11 @@ void ui_motion(Ui *u, Doc *d, DpAssets *a, int mx, int my, int buttons)
     if (u->prompt || u->menu_hold) {
         return;
     }
+    if (u->arrange && u->mixer && u->mix_drag > 0 && (buttons & 1)) {
+        int v = (lx - 52) * 16 / 128;
+        mixer_set_channel(u, d, u->mix_drag - 1, v);
+        return;
+    }
     if (u->panel_drag && (buttons & 1)) {
         int bar_y, bar_w, arr_l, arr_r, sl_x, sl_w, btn_x;
         panel_boxes(u, &bar_y, &bar_w, &arr_l, &arr_r, &sl_x, &sl_w, &btn_x);
@@ -5403,12 +5906,23 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
     if (u->enh_open && key != KEY_ESC) {
         return;
     }
+    if (u->range_open && key != KEY_ESC) {
+        return;
+    }
     if (key == KEY_ESC) {
         if (u->arrange) {
             memcpy(d->pal, u->arr_open, sizeof(d->pal));
             u->arrange = 0;
+            u->mixer = 0;
             u->arr_op = 0;
             doc_status(d, "Revert");
+            return;
+        }
+        if (u->range_open) {
+            memcpy(d->ranges, u->range_saved, sizeof(d->ranges));
+            d->nranges = u->nranges_saved;
+            u->range_open = 0;
+            doc_status(d, "CANCEL");
             return;
         }
         if (u->enh_open) {
@@ -5689,6 +6203,14 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
         do_act(u, d, a, A_TRIM, 0);
         return;
     }
+    if (ch == 'p') {
+        do_act(u, d, a, A_MIXER, 0);
+        return;
+    }
+    if (ch == 'P') {
+        do_act(u, d, a, A_ARRANGE, 0);
+        return;
+    }
     if (ch == 'l') {
         do_act(u, d, a, A_LT_ON, 0);
         return;
@@ -5703,6 +6225,26 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
     }
     if (ch == '|') {
         do_act(u, d, a, A_PREF, PREF_COORDS);
+        return;
+    }
+    if (key == '\t' || ch == '\t') {
+        do_act(u, d, a, A_CYCLE, 0);
+        return;
+    }
+    if (ch == '[') {
+        d->fg = (d->fg - 1 + d->ncolors) % d->ncolors;
+        return;
+    }
+    if (ch == ']') {
+        d->fg = (d->fg + 1) % d->ncolors;
+        return;
+    }
+    if (ch == '(') {
+        d->bg = (d->bg - 1 + d->ncolors) % d->ncolors;
+        return;
+    }
+    if (ch == ')') {
+        d->bg = (d->bg + 1) % d->ncolors;
         return;
     }
     if (ch == '_') {

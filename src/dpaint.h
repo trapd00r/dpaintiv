@@ -229,6 +229,9 @@ typedef struct {
     int wheel_y;
     int wheel_bg;
     int arrange;
+    int mixer;
+    int mix_hsv;
+    int mix_drag;
     int arr_top;
     int arr_sel;
     int arr_op;
@@ -236,6 +239,11 @@ typedef struct {
     int arr_undo_ok;
     DpColor arr_open[DP_MAX_COLORS];
     DpColor arr_undo[DP_MAX_COLORS];
+    int range_open;
+    int range_idx;
+    int range_pick_hi;
+    DpRange range_saved[DP_MAX_RANGES];
+    int nranges_saved;
     int bend_horiz;
     int place_handle;
 } Ui;
@@ -355,6 +363,8 @@ void doc_antialias_frame(Doc *d, int level);
 void doc_fix_background(Doc *d);
 void doc_free_background(Doc *d);
 void doc_lock_fg(Doc *d);
+void doc_remap_page(Doc *d);
+void doc_recompute_palette(Doc *d);
 
 int iff_write_png(const char *path, const uint8_t *pix, int w, int h,
                   const DpColor *pal, int ncolors);

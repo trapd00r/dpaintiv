@@ -117,6 +117,10 @@ static int map_key(SDL_Keycode sym, int *ch)
         *ch = ' ';
         return ' ';
     }
+    if (sym == SDLK_TAB) {
+        *ch = '\t';
+        return '\t';
+    }
     if (sym >= 32 && sym < 127) {
         *ch = (int)sym;
         return (int)sym;
@@ -260,8 +264,9 @@ int main(int argc, char **argv)
                     ui_key(&ui, &doc, &assets,
                            0xF1 + (int)(ev.key.keysym.sym - SDLK_F1), 0);
                 } else if (k == KEY_ESC || k == KEY_ENTER || k == KEY_BACK ||
-                    k == KEY_LEFT || k == KEY_RIGHT || k == KEY_UP || k == KEY_DOWN) {
-                    ui_key(&ui, &doc, &assets, k, 0);
+                    k == KEY_LEFT || k == KEY_RIGHT || k == KEY_UP || k == KEY_DOWN ||
+                    k == '\t') {
+                    ui_key(&ui, &doc, &assets, k, ch);
                 } else if (ch != 0 && (mod & KMOD_ALT)) {
                     ui_key(&ui, &doc, &assets, 0xA00 + (ch & 255), ch);
                 } else if ((mod & KMOD_CTRL) && (ch == 'z' || ch == 'Z')) {

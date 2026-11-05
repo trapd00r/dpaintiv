@@ -1804,6 +1804,11 @@ int main(void)
         expect(doc.frames[doc.cur].pix[2 * doc.frames[doc.cur].w + 2] == 31,
                "erasing with bg restores fixed background");
         doc_free_background(&doc);
+
+        ui_key(&ui, &doc, &assets, 'p', 'p');
+        expect(ui.arrange == 1 && ui.mixer == 1, "p opens color mixer");
+        ui_key(&ui, &doc, &assets, KEY_ESC, 0);
+        expect(ui.arrange == 0 && ui.mixer == 0, "esc closes color mixer");
     }
     printf("smoke %s (%d fails) ppm %s\n", fails ? "FAILED" : "ok", fails, ppm);
     free(snap);

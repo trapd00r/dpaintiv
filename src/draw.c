@@ -2044,3 +2044,38 @@ void doc_lock_fg(Doc *d)
     d->stencil = m;
     d->stencil_on = 1;
 }
+
+void doc_remap_page(Doc *d)
+{
+    int i, n;
+    uint8_t map[DP_MAX_COLORS];
+    const DpColor *src;
+    if (d == NULL) {
+        return;
+    }
+    src = d->brush.has_pal ? d->brush.pal : d->pal_saved;
+    for (i = 0; i < DP_MAX_COLORS; i++) {
+        map[i] = (uint8_t)doc_nearest(d, src[i].r, src[i].g, src[i].b);
+    }
+    n = fw(d) * fh(d);
+    for (i = 0; i < n; i++) {
+        uint8_t c = fpix(d)[i];
+        if (c < DP_MAX_COLORS) {
+            fpix(d)[i] = map[c];
+        }
+    }
+}
+
+void doc_recompute_palette(Doc *d)
+{
+    int i;
+    if (d == NULL) {
+        return;
+    }
+    for (i = 0; i < d->nranges; i++) {
+        if (d->ranges[i].high > d->ranges[i].low) {
+            doc_pal_spread(d, d->ranges[i].low, d->ranges[i].high);
+        }
+    }
+    memcpy(d->pal_saved, d->pal, sizeof(d->pal));
+}
