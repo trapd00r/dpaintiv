@@ -244,6 +244,7 @@ typedef struct {
     int range_pick_hi;
     DpRange range_saved[DP_MAX_RANGES];
     int nranges_saved;
+    int prsp_open;
     int bend_horiz;
     int place_handle;
 } Ui;
@@ -365,6 +366,11 @@ void doc_free_background(Doc *d);
 void doc_lock_fg(Doc *d);
 void doc_remap_page(Doc *d);
 void doc_recompute_palette(Doc *d);
+void doc_prsp_get(const Doc *d, int *rx, int *ry, int *rz, int *px, int *py, int *pz);
+void doc_prsp_set(Doc *d, int rx, int ry, int rz, int px, int py, int pz);
+void doc_prsp_reset(Doc *d);
+void doc_prsp_center(Doc *d);
+void doc_prsp_render(Doc *d, int fill_screen);
 
 int iff_write_png(const char *path, const uint8_t *pix, int w, int h,
                   const DpColor *pal, int ncolors);

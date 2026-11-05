@@ -260,6 +260,7 @@ int doc_init(Doc *d, int w, int h, int ncolors, const DpColor *pal)
         doc_free(d);
         return -1;
     }
+    doc_prsp_reset(d);
     d->undo_hist = 1;
     doc_status(d, "Deluxe Paint IV");
     (void)i;
@@ -2078,4 +2079,171 @@ void doc_recompute_palette(Doc *d)
         }
     }
     memcpy(d->pal_saved, d->pal, sizeof(d->pal));
+}
+
+static void dpps_w16(uint8_t *p, int v)
+{
+    uint16_t u = (uint16_t)(int16_t)v;
+    p[0] = (uint8_t)(u >> 8);
+    p[1] = (uint8_t)u;
+}
+
+static int dpps_r16(const uint8_t *p)
+{
+    return (int)(int16_t)((uint16_t)(p[0] << 8) | p[1]);
+}
+
+void doc_prsp_get(const Doc *d, int *rx, int *ry, int *rz, int *px, int *py, int *pz)
+{
+    int x = dpps_r16(d->dpps + 10);
+    int y = dpps_r16(d->dpps + 12);
+    int z = dpps_r16(d->dpps + 14);
+    if (x == 0 && y == 0) {
+        x = fw(d) / 2;
+        y = fh(d) / 2;
+    }
+    if (z <= 0) {
+        z = 200;
+    }
+    if (rx) {
+        *rx = dpps_r16(d->dpps + 4);
+    }
+    if (ry) {
+        *ry = dpps_r16(d->dpps + 6);
+    }
+    if (rz) {
+        *rz = dpps_r16(d->dpps + 8);
+    }
+    if (px) {
+        *px = x;
+    }
+    if (py) {
+        *py = y;
+    }
+    if (pz) {
+        *pz = z;
+    }
+}
+
+void doc_prsp_set(Doc *d, int rx, int ry, int rz, int px, int py, int pz)
+{
+    d->dpps[0] = 0;
+    d->dpps[1] = 1;
+    dpps_w16(d->dpps + 4, rx);
+    dpps_w16(d->dpps + 6, ry);
+    dpps_w16(d->dpps + 8, rz);
+    dpps_w16(d->dpps + 10, px);
+    dpps_w16(d->dpps + 12, py);
+    dpps_w16(d->dpps + 14, pz > 10 ? pz : 200);
+}
+
+void doc_prsp_reset(Doc *d)
+{
+    if (d == NULL) {
+        return;
+    }
+    doc_prsp_set(d, 0, 0, 0, fw(d) / 2, fh(d) / 2, 200);
+}
+
+void doc_prsp_center(Doc *d)
+{
+    int rx, ry, rz, px, py, pz;
+    if (d == NULL) {
+        return;
+    }
+    doc_prsp_get(d, &rx, &ry, &rz, &px, &py, &pz);
+    doc_prsp_set(d, rx, ry, rz, fw(d) / 2, fh(d) / 2, pz);
+}
+
+void doc_prsp_render(Doc *d, int fill_screen)
+{
+    int rx, ry, rz, cx, cy, focal;
+    int sw, sh, x, y;
+    uint8_t *src = NULL;
+    int free_src = 0;
+    uint8_t trans = 0;
+    double ax, ay, az, cxr, sxr, cyr, syr, czr, szr;
+    double u_x, u_y, u_z, v_x, v_y, v_z, n_x, n_y, n_z;
+    if (d == NULL) {
+        return;
+    }
+    doc_prsp_get(d, &rx, &ry, &rz, &cx, &cy, &focal);
+    if (d->brush.pix != NULL && d->brush.w > 0 && d->brush.h > 0) {
+        src = d->brush.pix;
+        sw = d->brush.w;
+        sh = d->brush.h;
+        trans = d->brush.trans;
+    } else {
+        sw = fw(d);
+        sh = fh(d);
+        src = (uint8_t *)malloc((size_t)sw * (size_t)sh);
+        if (src == NULL) {
+            return;
+        }
+        memcpy(src, fpix(d), (size_t)sw * (size_t)sh);
+        free_src = 1;
+        trans = (uint8_t)d->bg;
+    }
+    ax = (double)rx * 3.14159265358979323846 / 180.0;
+    ay = (double)ry * 3.14159265358979323846 / 180.0;
+    az = (double)rz * 3.14159265358979323846 / 180.0;
+    cxr = cos(ax);
+    sxr = sin(ax);
+    cyr = cos(ay);
+    syr = sin(ay);
+    czr = cos(az);
+    szr = sin(az);
+    u_x = cyr * czr;
+    u_y = sxr * syr * czr + cxr * szr;
+    u_z = -cxr * syr * czr + sxr * szr;
+    v_x = -cyr * szr;
+    v_y = -sxr * syr * szr + cxr * czr;
+    v_z = cxr * syr * szr + sxr * czr;
+    n_x = syr;
+    n_y = -sxr * cyr;
+    n_z = cxr * cyr;
+    for (y = 0; y < fh(d); y++) {
+        for (x = 0; x < fw(d); x++) {
+            double dx = (double)(x - cx);
+            double dy = (double)(y - cy);
+            double dz = (double)focal;
+            double denom = dx * n_x + dy * n_y + dz * n_z;
+            double t, px3, py3, pz3, u, v;
+            int su, sv;
+            uint8_t c;
+            if (fabs(denom) < 1e-4) {
+                continue;
+            }
+            t = ((double)focal * n_z) / denom;
+            if (t <= 0.05 || t > 20.0) {
+                continue;
+            }
+            px3 = dx * t;
+            py3 = dy * t;
+            pz3 = -focal + dz * t;
+            u = px3 * u_x + py3 * u_y + pz3 * u_z;
+            v = px3 * v_x + py3 * v_y + pz3 * v_z;
+            su = (int)floor(u + (double)sw * 0.5 + 0.5);
+            sv = (int)floor(v + (double)sh * 0.5 + 0.5);
+            if (fill_screen) {
+                su %= sw;
+                if (su < 0) {
+                    su += sw;
+                }
+                sv %= sh;
+                if (sv < 0) {
+                    sv += sh;
+                }
+            } else if (su < 0 || su >= sw || sv < 0 || sv >= sh) {
+                continue;
+            }
+            c = src[sv * sw + su];
+            if (fill_screen || d->mode == MODE_REPLC || c != trans) {
+                doc_plot(d, x, y, (d->mode == MODE_COLOR && c != trans) ? d->fg : (int)c);
+            }
+        }
+    }
+    if (free_src) {
+        free(src);
+    }
 }

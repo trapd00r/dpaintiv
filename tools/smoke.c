@@ -1809,6 +1809,25 @@ int main(void)
         expect(ui.arrange == 1 && ui.mixer == 1, "p opens color mixer");
         ui_key(&ui, &doc, &assets, KEY_ESC, 0);
         expect(ui.arrange == 0 && ui.mixer == 0, "esc closes color mixer");
+
+        doc_clear(&doc);
+        doc_prsp_set(&doc, 25, 15, 10, 20, 20, 180);
+        {
+            int rx, ry, rz, px, py, pz;
+            doc_prsp_get(&doc, &rx, &ry, &rz, &px, &py, &pz);
+            expect(rx == 25 && ry == 15 && rz == 10 && px == 20 && py == 20 && pz == 180,
+                   "perspective DPPS fields");
+        }
+        doc_prsp_render(&doc, 0);
+        {
+            int i, ink = 0;
+            for (i = 0; i < doc.frames[doc.cur].w * doc.frames[doc.cur].h; i++) {
+                if (doc.frames[doc.cur].pix[i] != 0) {
+                    ink++;
+                }
+            }
+            expect(ink > 0, "perspective Do paints projected brush");
+        }
     }
     printf("smoke %s (%d fails) ppm %s\n", fails ? "FAILED" : "ok", fails, ppm);
     free(snap);

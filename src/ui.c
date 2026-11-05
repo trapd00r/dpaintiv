@@ -67,6 +67,8 @@ enum {
     A_AA_NONE, A_AA_LOW, A_AA_HIGH,
     A_PROC_ON, A_PROC_MODE,
     A_TRANS_ON, A_TRANS_SET,
+    A_PRSP_DO, A_PRSP_FILL, A_PRSP_RESET, A_PRSP_CENTER, A_PRSP_SET,
+    A_PRSP_LOAD, A_PRSP_SAVE,
     A_RANGES, A_CYCLE, A_MIXER, A_ARRANGE,
     A_USEPAL, A_RESTORE_PAL, A_DEFAULT_PAL, A_LOAD_PAL, A_SAVE_PAL,
     A_BG_FG, A_SWAP_FG, A_REMAP, A_RECOMPUTE,
@@ -252,6 +254,13 @@ static const Item trans_items[] = {
     {"On/Off", A_TRANS_ON, 0, NULL, 0, "(alt+t)"},
     {"Settings..", A_TRANS_SET, 0, NULL, 0}
 };
+static const Item prsp_items[] = {
+    {"Do", A_PRSP_DO, 0, NULL, 0},
+    {"FillScreen", A_PRSP_FILL, 0, NULL, 0},
+    {"Reset", A_PRSP_RESET, 0, NULL, 0},
+    {"Center", A_PRSP_CENTER, 0, NULL, 0},
+    {"Settings..", A_PRSP_SET, 0, NULL, 0}
+};
 static const Item effect_items[] = {
     {"Stencil", 0, 0, st_items, 9},
     {"LightTable", 0, 0, lt_items, 7},
@@ -259,7 +268,7 @@ static const Item effect_items[] = {
     {"AntiAlias", 0, 0, aa_items, 3},
     {"Process", 0, 0, proc_items, 4},
     {"Translucency", 0, 0, trans_items, 2},
-    {"Perspective", A_NONE, 1, NULL, 0}
+    {"Perspective", 0, 0, prsp_items, 5}
 };
 
 static const Item pal_items[] = {
@@ -970,6 +979,12 @@ static const char *req_title(int act)
         return "Load Palette";
     case A_SAVE_PAL:
         return "Save Palette";
+    case A_PRSP_LOAD:
+    case 8001:
+        return "Load Perspective";
+    case A_PRSP_SAVE:
+    case 8002:
+        return "Save Perspective";
     case A_DELETE:
         return "Delete File";
     case A_PAGE:
@@ -1024,6 +1039,10 @@ static int file_act(int act)
     case A_ST_SAVE:
     case A_LOAD_PAL:
     case A_SAVE_PAL:
+    case A_PRSP_LOAD:
+    case A_PRSP_SAVE:
+    case 8001:
+    case 8002:
         return 1;
     default:
         return 0;
@@ -1661,6 +1680,8 @@ static void draw_arrange(const Ui *u, const Doc *d, const DpAssets *a,
                          uint8_t *rgb, int w, int h);
 static void draw_ranges(const Ui *u, const Doc *d, const DpAssets *a,
                         uint8_t *rgb, int w, int h);
+static void draw_prsp(const Ui *u, const Doc *d, const DpAssets *a,
+                      uint8_t *rgb, int w, int h);
 static void draw_wheel_swatch(const Ui *u, const Doc *d, uint8_t *rgb, int w, int h);
 
 void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
@@ -2136,7 +2157,7 @@ void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
         dp_font_rgb(f, rgb, w, h, (cx + 4) * s, (cy + 2) * s, "Cancel", 255, 255, 255, s);
     }
     if (u->pointer_seen && u->over_page && !u->prompt && u->menu_open < 0 &&
-        !u->about && !u->printer && !u->range_open) {
+        !u->about && !u->printer && !u->range_open && !u->prsp_open) {
         int k;
         int cx = u->pointer_x;
         int cy = u->pointer_y;
@@ -2151,6 +2172,7 @@ void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
     draw_hover(u, d, a, rgb, w, h);
     draw_enh(u, a, rgb, w, h);
     draw_ranges(u, d, a, rgb, w, h);
+    draw_prsp(u, d, a, rgb, w, h);
     draw_arrange(u, d, a, rgb, w, h);
     draw_wheel_swatch(u, d, rgb, w, h);
 }
@@ -2745,6 +2767,24 @@ static void finish_prompt(Ui *u, Doc *d)
             doc_status(d, "Can't Save");
         }
         break;
+    case A_PRSP_LOAD:
+    case A_PRSP_SAVE: {
+        uint8_t buf[DP_DPPS_LEN];
+        char err[80];
+        if (act == A_PRSP_SAVE) {
+            if (iff_save_prsp(path, d->dpps) != 0) {
+                doc_status(d, "Can't Save");
+            } else {
+                doc_status(d, "Save");
+            }
+        } else if (iff_load_prsp(path, buf, err, (int)sizeof(err)) != 0) {
+            doc_status(d, err[0] ? err : "Bad IFF Form");
+        } else {
+            memcpy(d->dpps, buf, DP_DPPS_LEN);
+            doc_status(d, "Load");
+        }
+        break;
+    }
     case A_ADD:
     case A_COPYF:
         n = atoi(path);
@@ -2879,7 +2919,7 @@ static void finish_prompt(Ui *u, Doc *d)
     if ((act == A_LOAD_PIC || act == A_SAVE_PIC || act == A_LOAD_BR ||
          act == A_SAVE_BR || act == A_LOAD_ANIM || act == A_SAVE_ANIM ||
          act == A_AB_LOAD || act == A_AB_SAVE || act == A_LOAD_PAL ||
-         act == A_SAVE_PAL) &&
+         act == A_SAVE_PAL || act == A_PRSP_LOAD || act == A_PRSP_SAVE) &&
         (strcmp(d->status, "Load") == 0 || strcmp(d->status, "Save") == 0)) {
         char kept[512];
         char *slash;
@@ -3384,6 +3424,28 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
         begin_prompt(u, d, A_TRANS_SET, "Translucency:");
         snprintf(u->text, sizeof(u->text), "%d", d->translucency_pct > 0 ? d->translucency_pct : 50);
         u->text_len = (int)strlen(u->text);
+        break;
+    case A_PRSP_DO:
+        doc_checkpoint(d);
+        doc_prsp_render(d, 0);
+        doc_status(d, "Perspective");
+        break;
+    case A_PRSP_FILL:
+        doc_checkpoint(d);
+        doc_prsp_render(d, 1);
+        doc_status(d, "FillScreen");
+        break;
+    case A_PRSP_RESET:
+        doc_prsp_reset(d);
+        doc_status(d, "Reset");
+        break;
+    case A_PRSP_CENTER:
+        doc_prsp_center(d);
+        doc_status(d, "Center");
+        break;
+    case A_PRSP_SET:
+        u->prsp_open = 1;
+        doc_status(d, "Perspective");
         break;
     case A_RANGES:
         memcpy(u->range_saved, d->ranges, sizeof(d->ranges));
@@ -4167,7 +4229,7 @@ static int hover_id_at(const Ui *u, const Doc *d, int lx, int ly)
     int bsize, tool, undo, clearb, special, idx;
     int bar_y, bar_w, arr_l, arr_r, sl_x, sl_w, btn_x, i;
     if (u->prompt || u->about || u->printer || u->menu_open >= 0 || u->enh_open ||
-        u->arrange || u->range_open) {
+        u->arrange || u->range_open || u->prsp_open) {
         return 0;
     }
     bsize = brush_size_at(u, lx, ly);
@@ -4617,7 +4679,7 @@ static void place_pointer(Ui *u, Doc *d, int mx, int my)
     u->over_page = over && px >= 0 && py >= 0 && px < page_w(d) && py < page_h(d);
     u->cursor_cross = (u->over_page && !u->prompt && u->menu_open < 0 &&
                        !u->about && !u->printer && !u->enh_open && !u->arrange &&
-                       !u->range_open) ? 1 : 0;
+                       !u->range_open && !u->prsp_open) ? 1 : 0;
     if (u->over_page) {
         u->mpx = px;
         u->mpy = py;
@@ -5429,6 +5491,118 @@ static int ranges_click(Ui *u, Doc *d, int lx, int ly)
     return 1;
 }
 
+static void draw_prsp(const Ui *u, const Doc *d, const DpAssets *a,
+                      uint8_t *rgb, int w, int h)
+{
+    const DpFont *f = font(a, u);
+    int s = sc(u);
+    int bx, by, bw = 244, bh = 112;
+    int rx, ry, rz, px, py, pz;
+    char buf[64];
+    if (!u->prsp_open || f == NULL) {
+        return;
+    }
+    doc_prsp_get(d, &rx, &ry, &rz, &px, &py, &pz);
+    box_dlg(u, bw, bh, &bx, &by);
+    fill_rect(rgb, w, h, bx * s, by * s, bw * s, bh * s, 204, 204, 204);
+    fill_rect(rgb, w, h, bx * s, by * s, bw * s, 12 * s, 20, 70, 180);
+    dp_font_rgb(f, rgb, w, h, (bx + 6) * s, (by + 2) * s, "Perspective", 255, 255, 255, s);
+    snprintf(buf, sizeof(buf), "Angle X:%d Y:%d Z:%d", rx, ry, rz);
+    dp_font_rgb(f, rgb, w, h, (bx + 8) * s, (by + 18) * s, buf, 0, 0, 0, s);
+    draw_btn(f, rgb, w, h, s, bx + 144, by + 16, 28, 12, "X+", 0);
+    draw_btn(f, rgb, w, h, s, bx + 176, by + 16, 28, 12, "Y+", 0);
+    draw_btn(f, rgb, w, h, s, bx + 208, by + 16, 28, 12, "Z+", 0);
+    snprintf(buf, sizeof(buf), "Pos X:%d Y:%d Z:%d", px, py, pz);
+    dp_font_rgb(f, rgb, w, h, (bx + 8) * s, (by + 34) * s, buf, 0, 0, 0, s);
+    draw_btn(f, rgb, w, h, s, bx + 144, by + 32, 28, 12, "PX", 0);
+    draw_btn(f, rgb, w, h, s, bx + 176, by + 32, 28, 12, "PY", 0);
+    draw_btn(f, rgb, w, h, s, bx + 208, by + 32, 28, 12, "PZ", 0);
+    draw_btn(f, rgb, w, h, s, bx + 8, by + 52, 44, 12, "Reset", 0);
+    draw_btn(f, rgb, w, h, s, bx + 56, by + 52, 48, 12, "Center", 0);
+    draw_btn(f, rgb, w, h, s, bx + 108, by + 52, 40, 12, "Load", 0);
+    draw_btn(f, rgb, w, h, s, bx + 152, by + 52, 40, 12, "Save", 0);
+    draw_btn(f, rgb, w, h, s, bx + 8, by + bh - 18, 40, 12, "Do", 1);
+    draw_btn(f, rgb, w, h, s, bx + 52, by + bh - 18, 68, 12, "FillScreen", 0);
+    draw_btn(f, rgb, w, h, s, bx + 132, by + bh - 18, 44, 12, "OK", 0);
+    draw_btn(f, rgb, w, h, s, bx + 184, by + bh - 18, 52, 12, "Cancel", 0);
+}
+
+static int prsp_click(Ui *u, Doc *d, int lx, int ly)
+{
+    int bx, by, bw = 244, bh = 112;
+    int rx, ry, rz, px, py, pz;
+    int ad = u->mod_alt ? -15 : 15;
+    int pd = u->mod_alt ? -16 : 16;
+    box_dlg(u, bw, bh, &bx, &by);
+    doc_prsp_get(d, &rx, &ry, &rz, &px, &py, &pz);
+    if (ly >= by + 16 && ly < by + 28) {
+        if (lx >= bx + 144 && lx < bx + 172) {
+            rx = (rx + ad) % 360;
+        } else if (lx >= bx + 176 && lx < bx + 204) {
+            ry = (ry + ad) % 360;
+        } else if (lx >= bx + 208 && lx < bx + 236) {
+            rz = (rz + ad) % 360;
+        }
+        doc_prsp_set(d, rx, ry, rz, px, py, pz);
+        return 1;
+    }
+    if (ly >= by + 32 && ly < by + 44) {
+        if (lx >= bx + 144 && lx < bx + 172) {
+            px += pd;
+        } else if (lx >= bx + 176 && lx < bx + 204) {
+            py += pd;
+        } else if (lx >= bx + 208 && lx < bx + 236) {
+            pz += pd;
+            if (pz < 20) {
+                pz = 20;
+            }
+        }
+        doc_prsp_set(d, rx, ry, rz, px, py, pz);
+        return 1;
+    }
+    if (ly >= by + 52 && ly < by + 64) {
+        if (lx >= bx + 8 && lx < bx + 52) {
+            doc_prsp_reset(d);
+        } else if (lx >= bx + 56 && lx < bx + 104) {
+            doc_prsp_center(d);
+        } else if (lx >= bx + 108 && lx < bx + 148) {
+            u->prsp_open = 0;
+            begin_prompt(u, d, A_PRSP_LOAD, "Load");
+        } else if (lx >= bx + 152 && lx < bx + 192) {
+            u->prsp_open = 0;
+            begin_prompt(u, d, A_PRSP_SAVE, "Save");
+        }
+        return 1;
+    }
+    if (ly >= by + bh - 18 && ly < by + bh - 6) {
+        if (lx >= bx + 8 && lx < bx + 48) {
+            u->prsp_open = 0;
+            doc_checkpoint(d);
+            doc_prsp_render(d, 0);
+            doc_status(d, "Perspective");
+            return 1;
+        }
+        if (lx >= bx + 52 && lx < bx + 120) {
+            u->prsp_open = 0;
+            doc_checkpoint(d);
+            doc_prsp_render(d, 1);
+            doc_status(d, "FillScreen");
+            return 1;
+        }
+        if (lx >= bx + 132 && lx < bx + 176) {
+            u->prsp_open = 0;
+            doc_status(d, "OK");
+            return 1;
+        }
+        if (lx >= bx + 184 && lx < bx + 236) {
+            u->prsp_open = 0;
+            doc_status(d, "CANCEL");
+            return 1;
+        }
+    }
+    return 1;
+}
+
 void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down)
 {
     sync_fonts(a);
@@ -5460,6 +5634,13 @@ void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down)
     if (u->range_open) {
         if (down && button == 1) {
             ranges_click(u, d, lx, ly);
+        }
+        return;
+    }
+
+    if (u->prsp_open) {
+        if (down && button == 1) {
+            prsp_click(u, d, lx, ly);
         }
         return;
     }
@@ -5906,7 +6087,7 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
     if (u->enh_open && key != KEY_ESC) {
         return;
     }
-    if (u->range_open && key != KEY_ESC) {
+    if ((u->range_open || u->prsp_open) && key != KEY_ESC) {
         return;
     }
     if (key == KEY_ESC) {
@@ -5923,6 +6104,10 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
             d->nranges = u->nranges_saved;
             u->range_open = 0;
             doc_status(d, "CANCEL");
+            return;
+        }
+        if (u->prsp_open) {
+            u->prsp_open = 0;
             return;
         }
         if (u->enh_open) {
