@@ -62,6 +62,11 @@ enum {
     A_AB_LOAD, A_AB_SAVE, A_AB_PICK, A_AB_FREE, A_AB_CELS,
     A_ST_MAKE, A_ST_REMAKE, A_ST_PAINT, A_ST_SHOW, A_ST_REV, A_ST_ON, A_ST_FREE,
     A_ST_LOAD, A_ST_SAVE,
+    A_LT_ON, A_LT_MERGE, A_LT_DIM, A_LT_TWO, A_LT_PREV, A_LT_NEXT, A_LT_SPARE,
+    A_BG_FIX, A_BG_FREE, A_BG_LOCK,
+    A_AA_NONE, A_AA_LOW, A_AA_HIGH,
+    A_PROC_ON, A_PROC_MODE,
+    A_TRANS_ON, A_TRANS_SET,
     A_CYCLE, A_USEPAL, A_RESTORE_PAL, A_DEFAULT_PAL, A_BG_FG, A_SWAP_FG,
     A_REMAP, A_TRANS, A_FONT, A_PREF,
     A_PANEL_ON, A_PANEL_OFF, A_VER2026, A_ARRANGE
@@ -205,22 +210,52 @@ static const Item anim_items[] = {
 };
 
 static const Item st_items[] = {
-    {"Make..", A_ST_MAKE, 0, NULL, 0},
+    {"Make..", A_ST_MAKE, 0, NULL, 0, "(~)"},
     {"Remake", A_ST_REMAKE, 0, NULL, 0},
     {"Paint On/Off", A_ST_PAINT, 0, NULL, 0},
     {"Show", A_ST_SHOW, 0, NULL, 0},
     {"Reverse", A_ST_REV, 0, NULL, 0},
-    {"On/Off", A_ST_ON, 0, NULL, 0},
+    {"On/Off", A_ST_ON, 0, NULL, 0, "(`)"},
     {"Free", A_ST_FREE, 0, NULL, 0},
     {"Load..", A_ST_LOAD, 0, NULL, 0},
     {"Save..", A_ST_SAVE, 0, NULL, 0}
 };
+static const Item lt_items[] = {
+    {"On/Off", A_LT_ON, 0, NULL, 0, "(l)"},
+    {"Merge", A_LT_MERGE, 0, NULL, 0},
+    {"Dim", A_LT_DIM, 0, NULL, 0, "(alt+l)"},
+    {"Two Back", A_LT_TWO, 0, NULL, 0},
+    {"Previous", A_LT_PREV, 0, NULL, 0},
+    {"Next", A_LT_NEXT, 0, NULL, 0},
+    {"Spare", A_LT_SPARE, 0, NULL, 0}
+};
+static const Item bg_items[] = {
+    {"Fix", A_BG_FIX, 0, NULL, 0},
+    {"Free", A_BG_FREE, 0, NULL, 0},
+    {"Lock FG", A_BG_LOCK, 0, NULL, 0}
+};
+static const Item aa_items[] = {
+    {"None", A_AA_NONE, 0, NULL, 0},
+    {"Low", A_AA_LOW, 0, NULL, 0},
+    {"High", A_AA_HIGH, 0, NULL, 0}
+};
+static const Item proc_items[] = {
+    {"On/Off", A_PROC_ON, 0, NULL, 0, "(alt+p)"},
+    {"Tint", A_PROC_MODE, PROC_TINT, NULL, 0},
+    {"Hue", A_PROC_MODE, PROC_HUE, NULL, 0},
+    {"Value", A_PROC_MODE, PROC_VALUE, NULL, 0}
+};
+static const Item trans_items[] = {
+    {"On/Off", A_TRANS_ON, 0, NULL, 0, "(alt+t)"},
+    {"Settings..", A_TRANS_SET, 0, NULL, 0}
+};
 static const Item effect_items[] = {
     {"Stencil", 0, 0, st_items, 9},
-    {"LightTable", A_NONE, 1, NULL, 0},
-    {"Background", A_NONE, 1, NULL, 0},
-    {"AntiAlias", A_NONE, 1, NULL, 0},
-    {"Translucency", A_NONE, 1, NULL, 0},
+    {"LightTable", 0, 0, lt_items, 7},
+    {"Background", 0, 0, bg_items, 3},
+    {"AntiAlias", 0, 0, aa_items, 3},
+    {"Process", 0, 0, proc_items, 4},
+    {"Translucency", 0, 0, trans_items, 2},
     {"Perspective", A_NONE, 1, NULL, 0}
 };
 
@@ -296,7 +331,7 @@ static const MenuBar bars[] = {
     {"Mode", mode_items, 10},
     {"Anim", anim_items, 6},
     {"Color", color_items, 6},
-    {"Effect", effect_items, 6},
+    {"Effect", effect_items, 7},
     {"Font", font_items, 1},
     {"Prefs", pref_items, 12}
 };
@@ -697,6 +732,45 @@ static int item_checked(const Ui *u, const Doc *d, const Item *it)
     if (it->act == A_CYCLE) {
         return d->nranges > 0 && d->ranges[0].active;
     }
+    if (it->act == A_LT_ON) {
+        return u->lt_on;
+    }
+    if (it->act == A_LT_DIM) {
+        return u->lt_dim;
+    }
+    if (it->act == A_LT_TWO) {
+        return u->lt_two;
+    }
+    if (it->act == A_LT_PREV) {
+        return u->lt_prev;
+    }
+    if (it->act == A_LT_NEXT) {
+        return u->lt_next;
+    }
+    if (it->act == A_LT_SPARE) {
+        return u->lt_spare;
+    }
+    if (it->act == A_BG_FIX) {
+        return d->bg_fixed_on;
+    }
+    if (it->act == A_AA_NONE) {
+        return d->antialias == 0;
+    }
+    if (it->act == A_AA_LOW) {
+        return d->antialias == 1;
+    }
+    if (it->act == A_AA_HIGH) {
+        return d->antialias == 2;
+    }
+    if (it->act == A_PROC_ON) {
+        return d->process_on;
+    }
+    if (it->act == A_PROC_MODE) {
+        return d->process_mode == it->arg;
+    }
+    if (it->act == A_TRANS_ON) {
+        return d->translucency_on;
+    }
     return 0;
 }
 
@@ -885,6 +959,8 @@ static const char *req_title(int act)
         return "Bend";
     case A_METAMORPH:
         return "Metamorph";
+    case A_TRANS_SET:
+        return "Translucency";
     case A_ADD:
         return "Add Frames";
     case A_COPYF:
@@ -2598,6 +2674,18 @@ static void finish_prompt(Ui *u, Doc *d)
             doc_status(d, "Must have spare brush");
         }
         break;
+    case A_TRANS_SET:
+        n = atoi(path);
+        if (n < 1) {
+            n = 50;
+        }
+        if (n > 100) {
+            n = 100;
+        }
+        d->translucency_pct = n;
+        d->translucency_on = 1;
+        doc_status(d, "Translucency");
+        break;
     case A_ADD:
     case A_COPYF:
         n = atoi(path);
@@ -2744,6 +2832,59 @@ static void finish_prompt(Ui *u, Doc *d)
                 *slash = 0;
             }
             snprintf(u->lastdir, sizeof(u->lastdir), "%s", kept);
+        }
+    }
+}
+
+static void merge_lighttable(const Ui *u, Doc *d)
+{
+    int w = page_w(d);
+    int h = page_h(d);
+    int i, n = w * h;
+    uint8_t *dst = d->frames[d->cur].pix;
+    if (dst == NULL) {
+        return;
+    }
+    for (i = 0; i < n; i++) {
+        if (dst[i] != (uint8_t)d->bg) {
+            continue;
+        }
+        if (d->nframes > 1) {
+            int which[3];
+            int nw = 0, k, hit = 0;
+            if (u->lt_two) {
+                which[nw++] = d->cur - 2;
+            }
+            if (u->lt_prev || (!u->lt_two && !u->lt_next && !u->lt_spare)) {
+                which[nw++] = d->cur - 1;
+            }
+            if (u->lt_next) {
+                which[nw++] = d->cur + 1;
+            }
+            for (k = nw - 1; k >= 0; k--) {
+                int fi = which[k];
+                while (fi < 0) {
+                    fi += d->nframes;
+                }
+                while (fi >= d->nframes) {
+                    fi -= d->nframes;
+                }
+                if (d->frames[fi].pix != NULL &&
+                    d->frames[fi].w == w && d->frames[fi].h == h &&
+                    d->frames[fi].pix[i] != (uint8_t)d->bg) {
+                    dst[i] = d->frames[fi].pix[i];
+                    hit = 1;
+                    break;
+                }
+            }
+            if (hit) {
+                continue;
+            }
+        }
+        if (u->lt_spare && d->spare.pix != NULL &&
+            d->spare.w == w && d->spare.h == h &&
+            d->spare.pix[i] != (uint8_t)d->bg) {
+            dst[i] = d->spare.pix[i];
         }
     }
 }
@@ -3093,6 +3234,96 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
         break;
     case A_ST_SAVE:
         begin_prompt(u, d, act, "Save");
+        break;
+    case A_LT_ON:
+        u->lt_on = !u->lt_on;
+        if (u->lt_on && !u->lt_prev && !u->lt_next && !u->lt_two && !u->lt_spare) {
+            u->lt_prev = 1;
+        }
+        doc_status(d, "LightTable");
+        break;
+    case A_LT_MERGE:
+        doc_checkpoint(d);
+        merge_lighttable(u, d);
+        doc_status(d, "Merge");
+        break;
+    case A_LT_DIM:
+        u->lt_dim = !u->lt_dim;
+        doc_status(d, u->lt_dim ? "Dim" : "Dim off");
+        break;
+    case A_LT_TWO:
+        u->lt_two = !u->lt_two;
+        if (u->lt_two) {
+            u->lt_on = 1;
+        }
+        doc_status(d, "Two Back");
+        break;
+    case A_LT_PREV:
+        u->lt_prev = !u->lt_prev;
+        if (u->lt_prev) {
+            u->lt_on = 1;
+        }
+        doc_status(d, "Previous");
+        break;
+    case A_LT_NEXT:
+        u->lt_next = !u->lt_next;
+        if (u->lt_next) {
+            u->lt_on = 1;
+        }
+        doc_status(d, "Next");
+        break;
+    case A_LT_SPARE:
+        u->lt_spare = !u->lt_spare;
+        if (u->lt_spare) {
+            u->lt_on = 1;
+        }
+        doc_status(d, "Spare");
+        break;
+    case A_BG_FIX:
+        doc_fix_background(d);
+        doc_status(d, "Fix");
+        break;
+    case A_BG_FREE:
+        doc_free_background(d);
+        doc_status(d, "Free");
+        break;
+    case A_BG_LOCK:
+        doc_lock_fg(d);
+        doc_status(d, "Lock FG");
+        break;
+    case A_AA_NONE:
+        d->antialias = 0;
+        doc_status(d, "None");
+        break;
+    case A_AA_LOW:
+        d->antialias = 1;
+        doc_checkpoint(d);
+        doc_antialias_frame(d, 1);
+        doc_status(d, "Low");
+        break;
+    case A_AA_HIGH:
+        d->antialias = 2;
+        doc_checkpoint(d);
+        doc_antialias_frame(d, 2);
+        doc_status(d, "High");
+        break;
+    case A_PROC_ON:
+        d->process_on = !d->process_on;
+        doc_status(d, "Process");
+        break;
+    case A_PROC_MODE:
+        d->process_mode = arg;
+        d->process_on = 1;
+        doc_status(d, arg == PROC_TINT ? "Tint" : arg == PROC_HUE ? "Hue" : "Value");
+        break;
+    case A_TRANS_ON:
+        d->translucency_on = !d->translucency_on;
+        doc_status(d, "Translucency");
+        break;
+    case A_TRANS_SET:
+        begin_prompt(u, d, A_TRANS_SET, "Translucency:");
+        snprintf(u->text, sizeof(u->text), "%d", d->translucency_pct > 0 ? d->translucency_pct : 50);
+        u->text_len = (int)strlen(u->text);
         break;
     case A_CYCLE:
         if (d->nranges < 1) {
@@ -5246,7 +5477,7 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
             doc_status(d, u->panel ? "Panel On" : "Panel Off");
             return;
         }
-        if (ak == '1') {
+        if (ak == '1' || ak == 'l') {
             u->lt_dim = !u->lt_dim;
             doc_status(d, u->lt_dim ? "Dim" : "Dim off");
             return;
@@ -5273,6 +5504,14 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
         }
         if (ak == 'z') {
             do_act(u, d, a, A_HANDLE_P, 0);
+            return;
+        }
+        if (ak == 'p') {
+            do_act(u, d, a, A_PROC_ON, 0);
+            return;
+        }
+        if (ak == 't') {
+            do_act(u, d, a, A_TRANS_ON, 0);
             return;
         }
     }
@@ -5448,6 +5687,22 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
     }
     if (ch == 'O') {
         do_act(u, d, a, A_TRIM, 0);
+        return;
+    }
+    if (ch == 'l') {
+        do_act(u, d, a, A_LT_ON, 0);
+        return;
+    }
+    if (ch == '~') {
+        do_act(u, d, a, A_ST_MAKE, 0);
+        return;
+    }
+    if (ch == '`') {
+        do_act(u, d, a, A_ST_ON, 0);
+        return;
+    }
+    if (ch == '|') {
+        do_act(u, d, a, A_PREF, PREF_COORDS);
         return;
     }
     if (ch == '_') {

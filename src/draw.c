@@ -250,6 +250,7 @@ int doc_init(Doc *d, int w, int h, int ncolors, const DpColor *pal)
     }
     memcpy(d->pal_saved, d->pal, sizeof(d->pal));
     set_default_range(d);
+    d->translucency_pct = 50;
     d->dpps[0] = 0;
     d->dpps[1] = 1;
     if (frame_alloc(&d->frames[0], w, h, 0) != 0) {
@@ -280,6 +281,9 @@ void doc_free(Doc *d)
     }
     free(d->stencil);
     d->stencil = NULL;
+    free(d->bg_fixed);
+    d->bg_fixed = NULL;
+    d->bg_fixed_on = 0;
     undo_clear(d);
     d->nframes = 0;
 }
@@ -361,6 +365,11 @@ int doc_resize(Doc *d, int w, int h, int ncolors)
     }
     if (d->stencil != NULL) {
         if (realloc_mask(&d->stencil, oldw, oldh, w, h, d->stencil) != 0) {
+            return -1;
+        }
+    }
+    if (d->bg_fixed != NULL) {
+        if (realloc_mask(&d->bg_fixed, oldw, oldh, w, h, d->bg_fixed) != 0) {
             return -1;
         }
     }
@@ -704,6 +713,29 @@ static int blend_idx(const Doc *d, int c_dst, int c_src, int pct)
     return doc_nearest(d, r, g, b);
 }
 
+static int process_idx(const Doc *d, int c_dst, int c_src)
+{
+    int h0, s0, v0, h1, s1, v1;
+    DpColor out;
+    if (c_dst < 0 || c_dst >= d->ncolors) {
+        c_dst = 0;
+    }
+    if (c_src < 0 || c_src >= d->ncolors) {
+        c_src = 0;
+    }
+    if (d->process_mode == PROC_TINT) {
+        return blend_idx(d, c_dst, c_src, 35);
+    }
+    rgb_to_hsv(d->pal[c_dst].r, d->pal[c_dst].g, d->pal[c_dst].b, &h0, &s0, &v0);
+    rgb_to_hsv(d->pal[c_src].r, d->pal[c_src].g, d->pal[c_src].b, &h1, &s1, &v1);
+    if (d->process_mode == PROC_HUE) {
+        hsv_to_rgb(h1, s0 > 16 ? s0 : s1, v0 > 16 ? v0 : v1, &out);
+    } else {
+        hsv_to_rgb(h0, s0, (v0 + v1) / 2, &out);
+    }
+    return doc_nearest(d, out.r, out.g, out.b);
+}
+
 void doc_plot(Doc *d, int x, int y, int color)
 {
     int i, lo, hi, c;
@@ -728,6 +760,18 @@ void doc_plot(Doc *d, int x, int y, int color)
     }
     p = fpix(d);
     c = p[i];
+    if (d->bg_fixed_on && d->bg_fixed != NULL && color == d->bg) {
+        color = d->bg_fixed[i];
+    }
+    if (d->translucency_on) {
+        int pct = d->translucency_pct > 0 ? d->translucency_pct : 50;
+        p[i] = (uint8_t)blend_idx(d, c, color, pct);
+        return;
+    }
+    if (d->process_on) {
+        p[i] = (uint8_t)process_idx(d, c, color);
+        return;
+    }
     range_of(d, &lo, &hi);
     switch (d->mode) {
     case MODE_SHADE:
@@ -844,6 +888,23 @@ void doc_dab(Doc *d, int x, int y, int color)
     }
 }
 
+static void plot_aa(Doc *d, int x, int y, int color, int pct)
+{
+    int i, cur;
+    if (!inside(d, x, y)) {
+        return;
+    }
+    i = y * fw(d) + x;
+    if (d->stencil_on && d->stencil != NULL && d->stencil[i]) {
+        return;
+    }
+    cur = fpix(d)[i];
+    if (cur == color) {
+        return;
+    }
+    write_px(d, x, y, blend_idx(d, cur, color, pct));
+}
+
 void doc_line(Doc *d, int x0, int y0, int x1, int y1, int color)
 {
     int dx = x1 - x0;
@@ -860,6 +921,7 @@ void doc_line(Doc *d, int x0, int y0, int x1, int y1, int color)
     err = dx - dy;
     for (;;) {
         int e2;
+        int ox = x0, oy = y0;
         doc_dab(d, x0, y0, color);
         if (x0 == x1 && y0 == y1) {
             break;
@@ -872,6 +934,11 @@ void doc_line(Doc *d, int x0, int y0, int x1, int y1, int color)
         if (e2 < dx) {
             err += dx;
             y0 += sy;
+        }
+        if (d->antialias > 0 && dx > 0 && dy > 0 && x0 != ox && y0 != oy) {
+            int pct = d->antialias >= 2 ? 50 : 33;
+            plot_aa(d, ox + sx, oy, color, pct);
+            plot_aa(d, ox, oy + sy, color, pct);
         }
     }
 }
@@ -957,6 +1024,15 @@ void doc_ellipse(Doc *d, int cx, int cy, int rx, int ry, int color, int fill)
             vy = (int64_t)x * (int64_t)x * ry2 + (int64_t)ay * (int64_t)ay * rx2;
             if (vx > edge || vy > edge) {
                 doc_dab(d, cx + x, cy + y, color);
+                if (d->antialias > 0) {
+                    int pct = d->antialias >= 2 ? 50 : 33;
+                    if (vx > edge && x != 0) {
+                        plot_aa(d, cx + ax, cy + y, color, pct);
+                    }
+                    if (vy > edge && y != 0) {
+                        plot_aa(d, cx + x, cy + ay, color, pct);
+                    }
+                }
             }
         }
         if (fill && xmax >= xmin) {
@@ -1087,7 +1163,12 @@ void doc_stamp_brush(Doc *d, const DpBrush *b, int x, int y, int use_bg)
             uint8_t c = b->pix[by * b->w + bx];
             int dx = x - b->hx + bx;
             int dy = y - b->hy + by;
-            if (d->mode == MODE_REPLC) {
+            if (d->translucency_on || d->process_on) {
+                if (d->mode == MODE_REPLC || c != b->trans) {
+                    int sc = (d->mode == MODE_COLOR) ? ink : (int)c;
+                    doc_plot(d, dx, dy, sc);
+                }
+            } else if (d->mode == MODE_REPLC) {
                 write_px(d, dx, dy, c);
             } else if (d->mode == MODE_COLOR) {
                 if (c != b->trans) {
@@ -1170,6 +1251,10 @@ void doc_pickup(Doc *d, int x0, int y0, int x1, int y1)
 
 void doc_clear(Doc *d)
 {
+    if (d->bg_fixed_on && d->bg_fixed != NULL) {
+        memcpy(fpix(d), d->bg_fixed, (size_t)fw(d) * (size_t)fh(d));
+        return;
+    }
     memset(fpix(d), (uint8_t)d->bg, (size_t)fw(d) * (size_t)fh(d));
 }
 
@@ -1864,4 +1949,98 @@ void doc_cycle_palette(Doc *d)
         }
         d->pal[r->low] = tmp;
     }
+}
+
+void doc_antialias_frame(Doc *d, int level)
+{
+    int w, h, x, y, pct;
+    uint8_t *src, *dst;
+    if (d == NULL || level <= 0) {
+        return;
+    }
+    w = fw(d);
+    h = fh(d);
+    dst = fpix(d);
+    src = (uint8_t *)malloc((size_t)w * (size_t)h);
+    if (src == NULL) {
+        return;
+    }
+    memcpy(src, dst, (size_t)w * (size_t)h);
+    pct = level >= 2 ? 50 : 33;
+    for (y = 1; y < h - 1; y++) {
+        for (x = 1; x < w - 1; x++) {
+            int i = y * w + x;
+            uint8_t c = src[i];
+            uint8_t u = src[(y - 1) * w + x];
+            uint8_t dn = src[(y + 1) * w + x];
+            uint8_t l = src[y * w + (x - 1)];
+            uint8_t r = src[y * w + (x + 1)];
+            if (d->stencil_on && d->stencil != NULL && d->stencil[i]) {
+                continue;
+            }
+            if (u == l && u != c && src[(y - 1) * w + (x - 1)] != u) {
+                dst[i] = (uint8_t)blend_idx(d, c, u, pct);
+            } else if (u == r && u != c && src[(y - 1) * w + (x + 1)] != u) {
+                dst[i] = (uint8_t)blend_idx(d, c, u, pct);
+            } else if (dn == l && dn != c && src[(y + 1) * w + (x - 1)] != dn) {
+                dst[i] = (uint8_t)blend_idx(d, c, dn, pct);
+            } else if (dn == r && dn != c && src[(y + 1) * w + (x + 1)] != dn) {
+                dst[i] = (uint8_t)blend_idx(d, c, dn, pct);
+            }
+        }
+    }
+    free(src);
+}
+
+void doc_fix_background(Doc *d)
+{
+    size_t n;
+    uint8_t *p;
+    if (d == NULL) {
+        return;
+    }
+    n = (size_t)fw(d) * (size_t)fh(d);
+    p = (uint8_t *)malloc(n);
+    if (p == NULL) {
+        return;
+    }
+    memcpy(p, fpix(d), n);
+    free(d->bg_fixed);
+    d->bg_fixed = p;
+    d->bg_fixed_on = 1;
+}
+
+void doc_free_background(Doc *d)
+{
+    if (d == NULL) {
+        return;
+    }
+    free(d->bg_fixed);
+    d->bg_fixed = NULL;
+    d->bg_fixed_on = 0;
+}
+
+void doc_lock_fg(Doc *d)
+{
+    int i, n;
+    uint8_t *m;
+    if (d == NULL) {
+        return;
+    }
+    n = fw(d) * fh(d);
+    m = (uint8_t *)malloc((size_t)n);
+    if (m == NULL) {
+        return;
+    }
+    for (i = 0; i < n; i++) {
+        uint8_t c = fpix(d)[i];
+        if (d->bg_fixed_on && d->bg_fixed != NULL) {
+            m[i] = (c != d->bg_fixed[i]) ? 1 : 0;
+        } else {
+            m[i] = (c != (uint8_t)d->bg) ? 1 : 0;
+        }
+    }
+    free(d->stencil);
+    d->stencil = m;
+    d->stencil_on = 1;
 }

@@ -49,6 +49,12 @@ enum {
     FMT_HI
 };
 
+enum {
+    PROC_TINT = 0,
+    PROC_HUE,
+    PROC_VALUE
+};
+
 typedef struct {
     uint8_t r, g, b;
 } DpColor;
@@ -135,6 +141,13 @@ typedef struct {
     uint8_t *stencil;
     int stencil_on;
     int stencil_show;
+    uint8_t *bg_fixed;
+    int bg_fixed_on;
+    int antialias;
+    int translucency_on;
+    int translucency_pct;
+    int process_on;
+    int process_mode;
     struct DpUndo {
         int frame;
         int w, h;
@@ -337,6 +350,11 @@ void brush_shear(DpBrush *b, int sx, int sy);
 void brush_rotate_angle(DpBrush *b, int deg);
 void brush_bend(DpBrush *b, int horiz, int amount);
 int brush_metamorph(Doc *d, int steps);
+
+void doc_antialias_frame(Doc *d, int level);
+void doc_fix_background(Doc *d);
+void doc_free_background(Doc *d);
+void doc_lock_fg(Doc *d);
 
 int iff_write_png(const char *path, const uint8_t *pix, int w, int h,
                   const DpColor *pal, int ncolors);

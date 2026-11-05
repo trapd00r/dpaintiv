@@ -1785,6 +1785,25 @@ int main(void)
         expect(doc.brush.w >= 8 && doc.brush.h >= 7, "any-angle rotate bounds");
         brush_bend(&doc.brush, 1, 3);
         expect(doc.brush.h >= 10, "bend horiz arches brush");
+
+        doc_clear(&doc);
+        doc.translucency_on = 1;
+        doc.translucency_pct = 50;
+        doc.fg = 31;
+        doc_plot(&doc, 5, 5, 31);
+        expect(doc.frames[doc.cur].pix[5 * doc.frames[doc.cur].w + 5] != 0 &&
+               doc.frames[doc.cur].pix[5 * doc.frames[doc.cur].w + 5] != 31,
+               "translucency blends between paper and ink");
+        doc.translucency_on = 0;
+        doc.antialias = 2;
+        doc_line(&doc, 2, 2, 14, 10, 31);
+        doc.antialias = 0;
+        doc_fix_background(&doc);
+        expect(doc.bg_fixed_on && doc.bg_fixed != NULL, "fix background");
+        doc_plot(&doc, 2, 2, 0);
+        expect(doc.frames[doc.cur].pix[2 * doc.frames[doc.cur].w + 2] == 31,
+               "erasing with bg restores fixed background");
+        doc_free_background(&doc);
     }
     printf("smoke %s (%d fails) ppm %s\n", fails ? "FAILED" : "ok", fails, ppm);
     free(snap);
