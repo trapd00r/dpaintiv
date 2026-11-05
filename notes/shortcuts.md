@@ -23,19 +23,21 @@ while the load/save path field is focused.
 | --- | --- | --- |
 | - | Brush smaller | done |
 | = | Brush larger | done |
-| _ | Custom brush smaller by 2 steps | not |
-| + | Custom brush larger by 2 steps | not |
+| _ | Custom brush smaller by 2 steps | done |
+| + | Custom brush larger by 2 steps | Adds a frame instead, as requested. |
 | b | Brush Selector | done |
-| z | 90 Degree rotate | not |
-| h | Halve | not |
-| H | Double | not |
-| x | Flip horizontal | not |
-| y | Flip vertical | not |
-| o | Edge, Outline | not |
-| Alt-n | Copies custom brush to spare brush | not |
-| Alt-b | Swaps current and spare custom brush | not |
-| Alt-s | Center brush handle | not |
-| Alt-z | Place brush handle | not |
+| z | 90 Degree rotate | done |
+| h | Halve | done |
+| H | Double | done |
+| x | Flip horizontal | done |
+| y | Flip vertical | done |
+| o | Edge, Outline | done |
+| O | Edge, Trim | done |
+| Alt-n | Copies custom brush to spare brush | done |
+| Alt-b | Swaps current and spare custom brush | done |
+| Alt-m | Metamorph custom brush into spare brush | done |
+| Alt-s | Center brush handle | done |
+| Alt-z | Place brush handle | done |
 | u | Undo | done |
 | j | Spare page swap (Picture, Spare, Swap) | done |
 
@@ -46,9 +48,17 @@ while the load/save path field is focused.
 | > | Increase magnification | done |
 | < | Decrease magnification | done |
 | / | Toggle Symmetry on/off | done |
-| , | PICK color cursor | not. Comma steps to the previous animation frame instead, as requested. |
-| [ and ] | Change foreground color | not |
-| ( and ) | Change background color | not |
+| , | PICK color cursor | Comma steps to the previous animation frame instead, as requested. |
+| [ and ] | Change foreground color | done |
+| ( and ) | Change background color | done |
+| p | Palette Mixer on/off | done |
+| P | Palette Arrange on/off | done |
+| TAB | Cycle on/off | done |
+| l | LightTable on/off | done |
+| Alt-l | LightTable Dim on/off | done |
+| Alt-p | Process on/off | done |
+| Alt-t | Translucency on/off | done |
+| M | Anim Move requester | done |
 
 The Grid, Magnify, and Zoom controls are the toolbox buttons. The manual
 says the Grid restricts painting to the grid points, Symmetry paints

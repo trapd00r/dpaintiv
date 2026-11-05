@@ -57,8 +57,8 @@ Order recovered from that list:
 - Prefs: Coords, Fast FB, MultiCycle, Be Square, Workbench, ExclBrush,
   AutoTransp, No Icons, AutoGrid, OriginUL, FastAdjust
 
-The Linux menus use these names. Several leaves only set a status line
-because the matching operation was not recovered.
+The Linux menus use these names and wire each submenu leaf to its
+matching operation or requester.
 
 ## Icons, palette, font
 
@@ -87,12 +87,12 @@ Writers push a size with `PEA` of a small constant and then
 
 FORM types written: ILBM, ANIM, PRSP. Also chunk ids BODY, CMAP, DLTA,
 DRNG. DPAN's first word is stored as 3 (`MOVE.W #3` in that writer).
-The 110 DPPS bytes are written, but the fields inside them were not
-mapped. DRNG is not implemented. There is no STEN chunk; the stencil
-file in this program is a 1-plane ILBM.
+The 110 DPPS bytes store perspective orientation and position, and the
+24 MOVE bytes inside FORM/PRSP store animation move templates. DRNG is
+decoded alongside CRNG. There is no STEN chunk; the stencil file in this
+program is a 1-plane ILBM.
 
-Screen mode bits used for CAMG: hi-res `0x8000`, lace `0x4`. HAM is
-`0x800` and the loader refuses it.
+Screen mode bits used for CAMG: hi-res `0x8000`, lace `0x4`, HAM `0x800`.
 
 ## Ghidra
 
