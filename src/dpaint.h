@@ -184,6 +184,12 @@ typedef struct {
     int text_len;
     int about;
     int printer;
+    int prt_shade;
+    int prt_neg;
+    int prt_sideways;
+    int prt_wide;
+    int prt_high;
+    char print_path[512];
     int show_spare;
     int stroking;
     int gesture;
@@ -382,6 +388,8 @@ void doc_prsp_reset(Doc *d);
 void doc_prsp_center(Doc *d);
 void doc_prsp_render(Doc *d, int fill_screen);
 void doc_apply_move(Doc *d, const DpMove *mv, int trails_only);
+int doc_print_picture(const Doc *d, const char *path, int shade, int neg,
+                      int sideways, int pct_w, int pct_h);
 
 int iff_write_png(const char *path, const uint8_t *pix, int w, int h,
                   const DpColor *pal, int ncolors);

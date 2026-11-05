@@ -1847,6 +1847,9 @@ int main(void)
             expect(mv_in.dx == 16 && mv_in.dy == 8 && mv_in.rz == 45 &&
                    mv_in.count == 4 && mv_in.ease_in == 1 && mv_in.trails == 1,
                    "move template fields round-trip");
+            snprintf(mpath, sizeof(mpath), "%s/printed.ppm", dir);
+            expect(doc_print_picture(&doc, mpath, 1, 0, 0, 100, 100) == 0,
+                   "print picture ppm");
         }
     }
     printf("smoke %s (%d fails) ppm %s\n", fails ? "FAILED" : "ok", fails, ppm);

@@ -602,6 +602,9 @@ void ui_init(Ui *u)
     u->enh_wheel = 1;
     u->enh_pick = 1;
     u->ab_cels = 1;
+    u->prt_shade = 2;
+    u->prt_wide = 100;
+    u->prt_high = 100;
 }
 
 void ui_cfg_path(char *dst, int n)
@@ -1690,6 +1693,7 @@ static void draw_hover(const Ui *u, const Doc *d, const DpAssets *a,
 static void draw_enh(const Ui *u, const DpAssets *a, uint8_t *rgb, int w, int h);
 static void draw_arrange(const Ui *u, const Doc *d, const DpAssets *a,
                          uint8_t *rgb, int w, int h);
+static void draw_print(const Ui *u, const DpAssets *a, uint8_t *rgb, int w, int h);
 static void draw_ranges(const Ui *u, const Doc *d, const DpAssets *a,
                         uint8_t *rgb, int w, int h);
 static void draw_move(const Ui *u, const Doc *d, const DpAssets *a,
@@ -2105,8 +2109,7 @@ void ui_render(const Ui *u, const Doc *d, const DpAssets *a,
         }
     }
     if (u->printer && f != NULL) {
-        fill_rect(rgb, w, h, 40 * s, 40 * s, 180 * s, 28 * s, 240, 240, 240);
-        dp_font_rgb(f, rgb, w, h, 48 * s, 48 * s, "Printer not Ready", 0, 0, 0, s);
+        draw_print(u, a, rgb, w, h);
     }
     if (u->prompt && f != NULL) {
         int rx, ry, rw, rh, okx, oky, cx, cy, bw, bh;
@@ -3050,6 +3053,7 @@ static void do_act(Ui *u, Doc *d, DpAssets *a, int act, int arg)
         break;
     case A_PRINT:
         u->printer = 1;
+        doc_status(d, "Print Picture");
         break;
     case A_FLIP_H:
         doc_checkpoint(d);
@@ -5407,6 +5411,111 @@ static void draw_btn(const DpFont *f, uint8_t *rgb, int w, int h, int s,
     }
 }
 
+static void draw_print(const Ui *u, const DpAssets *a, uint8_t *rgb, int w, int h)
+{
+    const DpFont *f = font(a, u);
+    int s = sc(u);
+    int bx, by, bw = 224, bh = 116;
+    char buf[48];
+    if (!u->printer || f == NULL) {
+        return;
+    }
+    box_dlg(u, bw, bh, &bx, &by);
+    fill_rect(rgb, w, h, bx * s, by * s, bw * s, bh * s, 204, 204, 204);
+    fill_rect(rgb, w, h, bx * s, by * s, bw * s, 12 * s, 20, 70, 180);
+    dp_font_rgb(f, rgb, w, h, (bx + 6) * s, (by + 2) * s, "Print Picture", 255, 255, 255, s);
+    dp_font_rgb(f, rgb, w, h, (bx + 8) * s, (by + 18) * s, "Shade:", 0, 0, 0, s);
+    draw_btn(f, rgb, w, h, s, bx + 56, by + 16, 44, 12, "B & W", u->prt_shade == 0);
+    draw_btn(f, rgb, w, h, s, bx + 104, by + 16, 44, 12, "Grey", u->prt_shade == 1);
+    draw_btn(f, rgb, w, h, s, bx + 152, by + 16, 44, 12, "Color", u->prt_shade == 2);
+    dp_font_rgb(f, rgb, w, h, (bx + 8) * s, (by + 34) * s, "Image:", 0, 0, 0, s);
+    draw_btn(f, rgb, w, h, s, bx + 56, by + 32, 32, 12, "+", !u->prt_neg);
+    draw_btn(f, rgb, w, h, s, bx + 92, by + 32, 32, 12, "-", u->prt_neg);
+    dp_font_rgb(f, rgb, w, h, (bx + 8) * s, (by + 50) * s, "Aspect:", 0, 0, 0, s);
+    draw_btn(f, rgb, w, h, s, bx + 56, by + 48, 56, 12, "Normal", !u->prt_sideways);
+    draw_btn(f, rgb, w, h, s, bx + 116, by + 48, 64, 12, "Sideways", u->prt_sideways);
+    snprintf(buf, sizeof(buf), "%%Wide: %d", u->prt_wide);
+    dp_font_rgb(f, rgb, w, h, (bx + 8) * s, (by + 68) * s, buf, 0, 0, 0, s);
+    draw_btn(f, rgb, w, h, s, bx + 78, by + 66, 16, 12, "-", 0);
+    draw_btn(f, rgb, w, h, s, bx + 96, by + 66, 16, 12, "+", 0);
+    snprintf(buf, sizeof(buf), "%%High: %d", u->prt_high);
+    dp_font_rgb(f, rgb, w, h, (bx + 118) * s, (by + 68) * s, buf, 0, 0, 0, s);
+    draw_btn(f, rgb, w, h, s, bx + 184, by + 66, 16, 12, "-", 0);
+    draw_btn(f, rgb, w, h, s, bx + 202, by + 66, 16, 12, "+", 0);
+    draw_btn(f, rgb, w, h, s, bx + 12, by + bh - 18, 56, 12, "Print", 1);
+    draw_btn(f, rgb, w, h, s, bx + bw - 68, by + bh - 18, 56, 12, "Cancel", 0);
+}
+
+static int print_click(Ui *u, Doc *d, int lx, int ly)
+{
+    int bx, by, bw = 224, bh = 116;
+    char out[532];
+    box_dlg(u, bw, bh, &bx, &by);
+    if (ly >= by + 16 && ly < by + 28) {
+        if (lx >= bx + 56 && lx < bx + 100) {
+            u->prt_shade = 0;
+        } else if (lx >= bx + 104 && lx < bx + 148) {
+            u->prt_shade = 1;
+        } else if (lx >= bx + 152 && lx < bx + 196) {
+            u->prt_shade = 2;
+        }
+        return 1;
+    }
+    if (ly >= by + 32 && ly < by + 44) {
+        if (lx >= bx + 56 && lx < bx + 88) {
+            u->prt_neg = 0;
+        } else if (lx >= bx + 92 && lx < bx + 124) {
+            u->prt_neg = 1;
+        }
+        return 1;
+    }
+    if (ly >= by + 48 && ly < by + 60) {
+        if (lx >= bx + 56 && lx < bx + 112) {
+            u->prt_sideways = 0;
+        } else if (lx >= bx + 116 && lx < bx + 180) {
+            u->prt_sideways = 1;
+        }
+        return 1;
+    }
+    if (ly >= by + 66 && ly < by + 78) {
+        if (lx >= bx + 78 && lx < bx + 94 && u->prt_wide > 25) {
+            u->prt_wide -= 25;
+        } else if (lx >= bx + 96 && lx < bx + 112 && u->prt_wide < 200) {
+            u->prt_wide += 25;
+        } else if (lx >= bx + 184 && lx < bx + 200 && u->prt_high > 25) {
+            u->prt_high -= 25;
+        } else if (lx >= bx + 202 && lx < bx + 218 && u->prt_high < 200) {
+            u->prt_high += 25;
+        }
+        return 1;
+    }
+    if (ly >= by + bh - 18 && ly < by + bh - 6) {
+        if (lx >= bx + 12 && lx < bx + 68) {
+            if (u->print_path[0] != 0) {
+                snprintf(out, sizeof(out), "%s", u->print_path);
+            } else if (u->lastdir[0] != 0) {
+                snprintf(out, sizeof(out), "%s/print.ppm", u->lastdir);
+            } else {
+                snprintf(out, sizeof(out), "/tmp/dpaint-print.ppm");
+            }
+            if (doc_print_picture(d, out, u->prt_shade, u->prt_neg,
+                                  u->prt_sideways, u->prt_wide, u->prt_high) == 0) {
+                doc_status(d, "Printing ...");
+            } else {
+                doc_status(d, "Printer not Ready");
+            }
+            u->printer = 0;
+            return 1;
+        }
+        if (lx >= bx + bw - 68 && lx < bx + bw - 12) {
+            u->printer = 0;
+            doc_status(d, "CANCEL");
+            return 1;
+        }
+    }
+    return 1;
+}
+
 static void draw_ranges(const Ui *u, const Doc *d, const DpAssets *a,
                         uint8_t *rgb, int w, int h)
 {
@@ -5833,6 +5942,13 @@ void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down)
         return;
     }
 
+    if (u->printer) {
+        if (down && button == 1) {
+            print_click(u, d, lx, ly);
+        }
+        return;
+    }
+
     if (u->prompt) {
         if (down) {
             int rx, ry, rw, rh, okx, oky, cx, cy, bw, bh;
@@ -5852,10 +5968,9 @@ void ui_mouse(Ui *u, Doc *d, DpAssets *a, int mx, int my, int button, int down)
         }
         return;
     }
-    if (u->about || u->printer) {
+    if (u->about) {
         if (down) {
             u->about = 0;
-            u->printer = 0;
         }
         return;
     }
@@ -6275,7 +6390,7 @@ void ui_key(Ui *u, Doc *d, DpAssets *a, int key, int ch)
     if (u->enh_open && key != KEY_ESC) {
         return;
     }
-    if ((u->range_open || u->move_open || u->prsp_open) && key != KEY_ESC) {
+    if ((u->range_open || u->move_open || u->prsp_open || u->printer) && key != KEY_ESC) {
         return;
     }
     if (key == KEY_ESC) {

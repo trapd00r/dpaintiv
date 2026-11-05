@@ -2310,3 +2310,84 @@ void doc_apply_move(Doc *d, const DpMove *mv, int trails_only)
         d->cur = start_frame;
     }
 }
+
+int doc_print_picture(const Doc *d, const char *path, int shade, int neg,
+                      int sideways, int pct_w, int pct_h)
+{
+    const DpFrame *fr;
+    int sw, sh, ow, oh, x, y, rc;
+    uint8_t *rgb;
+    if (d == NULL || path == NULL || path[0] == 0) {
+        return -1;
+    }
+    fr = &d->frames[d->cur];
+    if (fr->pix == NULL || fr->w < 1 || fr->h < 1) {
+        return -1;
+    }
+    if (pct_w < 10) {
+        pct_w = 100;
+    }
+    if (pct_h < 10) {
+        pct_h = 100;
+    }
+    sw = fr->w * pct_w / 100;
+    sh = fr->h * pct_h / 100;
+    if (sw < 1) {
+        sw = 1;
+    }
+    if (sh < 1) {
+        sh = 1;
+    }
+    ow = sideways ? sh : sw;
+    oh = sideways ? sw : sh;
+    rgb = (uint8_t *)malloc((size_t)ow * (size_t)oh * 3u);
+    if (rgb == NULL) {
+        return -1;
+    }
+    for (y = 0; y < oh; y++) {
+        for (x = 0; x < ow; x++) {
+            int sx = sideways ? (y * fr->w / sh) : (x * fr->w / sw);
+            int sy = sideways ? ((ow - 1 - x) * fr->h / sw) : (y * fr->h / sh);
+            int idx, r, g, b, di;
+            if (sx < 0) {
+                sx = 0;
+            }
+            if (sx >= fr->w) {
+                sx = fr->w - 1;
+            }
+            if (sy < 0) {
+                sy = 0;
+            }
+            if (sy >= fr->h) {
+                sy = fr->h - 1;
+            }
+            idx = fr->pix[sy * fr->w + sx];
+            if (idx < 0 || idx >= d->ncolors) {
+                idx = 0;
+            }
+            r = d->pal[idx].r;
+            g = d->pal[idx].g;
+            b = d->pal[idx].b;
+            if (shade == 0) {
+                int lum = (r * 30 + g * 59 + b * 11) / 100;
+                int thr = ((x ^ y) & 1) ? 144 : 112;
+                r = g = b = lum >= thr ? 255 : 0;
+            } else if (shade == 1) {
+                int lum = (r * 30 + g * 59 + b * 11) / 100;
+                r = g = b = lum;
+            }
+            if (neg) {
+                r = 255 - r;
+                g = 255 - g;
+                b = 255 - b;
+            }
+            di = (y * ow + x) * 3;
+            rgb[di] = (uint8_t)r;
+            rgb[di + 1] = (uint8_t)g;
+            rgb[di + 2] = (uint8_t)b;
+        }
+    }
+    rc = dp_write_ppm(path, rgb, ow, oh);
+    free(rgb);
+    return rc;
+}
